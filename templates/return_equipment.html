@@ -14,22 +14,37 @@
     <a href="{{ url_for('return_equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
 
-<form method="POST">
-    <div class="form-group">
-        <label for="loan_id">Select Equipment to Return:</label>
-        <select id="loan_id" name="loan_id" required>
-            <option value="">-- Choose Equipment --</option>
-            {% for item in checked_out %}
-            <option value="{{ item.id }}">{{ item.equipment_id }} - {{ item.item_name }} (Checked out to {{ item.name }} on {{ item.checked_out_date }}, due {{ item.due_date }})</option>
-            {% endfor %}
-        </select>
-    </div>
-
-    <button type="submit" class="btn">Return Equipment</button>
-    <a href="{{ url_for('index') }}" class="btn" style="margin-left: 10px;">Cancel</a>
-</form>
-
-{% if not checked_out %}
+{% if checked_out %}
+<table>
+    <thead>
+        <tr>
+            <th>Equipment ID</th>
+            <th>Item Name</th>
+            <th>Customer</th>
+            <th>Checked Out Date</th>
+            <th>Due Date</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in checked_out %}
+        <tr>
+            <td>{{ item.equipment_id }}</td>
+            <td>{{ item.item_name }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.checked_out_date }}</td>
+            <td>{{ item.due_date }}</td>
+            <td>
+                <form method="POST" style="margin:0; display:inline;">
+                    <input type="hidden" name="loan_id" value="{{ item.id }}">
+                    <button type="submit" class="btn btn-danger">Return</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
 <p>No equipment is currently checked out.</p>
 {% endif %}
 {% endblock %}

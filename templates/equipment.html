@@ -23,6 +23,7 @@
             <th>Equipment ID</th>
             <th>Item Name</th>
             <th>Status</th>
+            <th>Action</th>
         </tr>
     </thead>
     <tbody>
@@ -31,6 +32,11 @@
             <td>{{ item.equipment_id }}</td>
             <td>{{ item.item_name }}</td>
             <td>{% if item.loan_id %}Checked out to {{ item.customer_name }} until {{ item.due_date }}{% else %}Available{% endif %}</td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_equipment', equipment_id=item.equipment_id) }}" style="display:inline; margin:0;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Delete equipment {{ item.equipment_id }}?');">Delete</button>
+                </form>
+            </td>
         </tr>
         {% endfor %}
     </tbody>

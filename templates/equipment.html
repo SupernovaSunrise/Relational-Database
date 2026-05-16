@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Equipment - Equipment Checkout Database{% endblock %}
+
+{% block content %}
+<h1>Equipment</h1>
+
+<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px;">
+        <label for="search">Search equipment</label>
+        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item, or customer">
+    </div>
+    <button type="submit" class="btn">Search</button>
+    <a href="{{ url_for('equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
+</form>
+
+<a href="{{ url_for('add_equipment') }}" class="btn">Add New Equipment</a>
+
+{% if equipment %}
+<table>
+    <thead>
+        <tr>
+            <th>Equipment ID</th>
+            <th>Item Name</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in equipment %}
+        <tr>
+            <td>{{ item.equipment_id }}</td>
+            <td>{{ item.item_name }}</td>
+            <td>{% if item.loan_id %}Checked out to {{ item.customer_name }} until {{ item.due_date }}{% else %}Available{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No equipment registered yet.</p>
+{% endif %}
+{% endblock %}

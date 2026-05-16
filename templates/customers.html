@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Customers - Equipment Checkout Database{% endblock %}
+
+{% block content %}
+<h1>Customers</h1>
+
+<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px;">
+        <label for="search">Search customers</label>
+        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Name, phone, or zip">
+    </div>
+    <button type="submit" class="btn">Search</button>
+    <a href="{{ url_for('customers') }}" class="btn" style="background-color: #6c757d;">Clear</a>
+</form>
+
+<a href="{{ url_for('add_customer') }}" class="btn">Add New Customer</a>
+
+{% if customers %}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Zip Code</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for customer in customers %}
+        <tr>
+            <td>{{ customer.id }}</td>
+            <td>{{ customer.name }}</td>
+            <td>{{ customer.phone }}</td>
+            <td>{{ customer.zip_code }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No customers registered yet.</p>
+{% endif %}
+{% endblock %}

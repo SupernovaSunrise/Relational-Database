@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Return Equipment - Equipment Checkout Database{% endblock %}
+
+{% block content %}
+<h1>Return Equipment</h1>
+
+<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px;">
+        <label for="search">Search checked-out items</label>
+        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment, item, or customer">
+    </div>
+    <button type="submit" class="btn">Search</button>
+    <a href="{{ url_for('return_equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
+</form>
+
+<form method="POST">
+    <div class="form-group">
+        <label for="loan_id">Select Equipment to Return:</label>
+        <select id="loan_id" name="loan_id" required>
+            <option value="">-- Choose Equipment --</option>
+            {% for item in checked_out %}
+            <option value="{{ item.id }}">{{ item.equipment_id }} - {{ item.item_name }} (Checked out to {{ item.name }} on {{ item.checked_out_date }}, due {{ item.due_date }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit" class="btn">Return Equipment</button>
+    <a href="{{ url_for('index') }}" class="btn" style="margin-left: 10px;">Cancel</a>
+</form>
+
+{% if not checked_out %}
+<p>No equipment is currently checked out.</p>
+{% endif %}
+{% endblock %}

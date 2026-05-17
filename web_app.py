@@ -26,7 +26,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
-            zip_code TEXT NOT NULL
+            zip_code TEXT NOT NULL,
+            date_added TEXT NOT NULL DEFAULT CURRENT_DATE
         )
         """
     )
@@ -52,12 +53,32 @@ def init_db():
         )
         """
     )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS checkout_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_zip_code TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            equipment_id TEXT NOT NULL,
+            checkout_date TEXT NOT NULL,
+            FOREIGN KEY(equipment_id) REFERENCES equipment(equipment_id)
+        )
+        """
+    )
     conn.commit()
+    cursor.execute("PRAGMA table_info(customers)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "date_added" not in columns:
+        cursor.execute("ALTER TABLE customers ADD COLUMN date_added TEXT")
+        cursor.execute("UPDATE customers SET date_added = date('now') WHERE date_added IS NULL")
+        conn.commit()
+
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_equipment_item_name ON equipment(item_name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_equipment_status ON loans(equipment_id, returned_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_customer_status ON loans(customer_id, returned_date)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_checkout_log_date ON checkout_log(checkout_date)")
     conn.commit()
     conn.close()
 
@@ -125,8 +146,8 @@ def master_control():
             cursor = conn.cursor()
             try:
                 cursor.execute(
-                    "INSERT INTO customers (name, phone, zip_code) VALUES (?, ?, ?)",
-                    (name, phone, zip_code),
+                    "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
+                    (name, phone, zip_code, datetime.today().date().isoformat()),
                 )
                 conn.commit()
                 flash(f'Customer "{name}" added successfully.')
@@ -180,6 +201,7 @@ def master_control():
                 checkout_candidates = matches
             else:
                 customer_id = matches[0]["id"]
+                customer_zip = matches[0]["zip_code"]
                 conn = connect_db()
                 cursor = conn.cursor()
                 cursor.execute(
@@ -191,11 +213,22 @@ def master_control():
                     flash('Equipment is already checked out.')
                     return redirect(url_for('master_control'))
 
+                cursor.execute(
+                    "SELECT item_name FROM equipment WHERE equipment_id = ?",
+                    (equipment_id,)
+                )
+                equipment_row = cursor.fetchone()
+                item_name = equipment_row["item_name"] if equipment_row else equipment_id
+
                 checked_out_date = datetime.today().date()
                 due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
                 cursor.execute(
                     "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date) VALUES (?, ?, ?, ?)",
                     (customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat()),
+                )
+                cursor.execute(
+                    "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date) VALUES (?, ?, ?, ?)",
+                    (customer_zip, item_name, equipment_id, checked_out_date.isoformat()),
                 )
                 conn.commit()
                 conn.close()
@@ -275,13 +308,13 @@ def customers():
     if search:
         search_pattern = f"%{search}%"
         cursor.execute(
-            "SELECT id, name, phone, zip_code FROM customers "
+            "SELECT id, name, phone, zip_code, date_added FROM customers "
             "WHERE name LIKE ? OR phone LIKE ? OR zip_code LIKE ? "
             "ORDER BY name",
             (search_pattern, search_pattern, search_pattern),
         )
     else:
-        cursor.execute("SELECT id, name, phone, zip_code FROM customers ORDER BY name")
+        cursor.execute("SELECT id, name, phone, zip_code, date_added FROM customers ORDER BY name")
     customers_list = cursor.fetchall()
     conn.close()
     return render_template('customers.html', customers=customers_list, search=search)
@@ -312,8 +345,8 @@ def add_customer():
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO customers (name, phone, zip_code) VALUES (?, ?, ?)",
-                (name, phone, zip_code),
+                "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
+                (name, phone, zip_code, datetime.today().date().isoformat()),
             )
             conn.commit()
             flash(f'Customer "{name}" added successfully.')
@@ -556,6 +589,51 @@ def return_equipment():
 @app.route('/checked_out')
 def checked_out():
     return redirect(url_for('return_equipment'))
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'export':
+            export_type = request.form.get('export_type')
+            conn = connect_db()
+            cursor = conn.cursor()
+            
+            if export_type == 'customers':
+                cursor.execute("SELECT id, name, phone, zip_code, date_added FROM customers ORDER BY id")
+                rows = cursor.fetchall()
+                csv_content = "ID,Name,Phone,ZipCode,DateAdded\n"
+                for row in rows:
+                    csv_content += f"{row['id']},{row['name']},{row['phone']},{row['zip_code']},{row['date_added']}\n"
+                conn.close()
+                from flask import make_response
+                response = make_response(csv_content)
+                response.headers['Content-Disposition'] = 'attachment; filename=customers_export.csv'
+                response.headers['Content-Type'] = 'text/csv'
+                return response
+            
+            elif export_type == 'equipment':
+                cursor.execute("SELECT equipment_id, item_name FROM equipment ORDER BY equipment_id")
+                rows = cursor.fetchall()
+                csv_content = "EquipmentID,ItemName\n"
+                for row in rows:
+                    csv_content += f"{row['equipment_id']},{row['item_name']}\n"
+                conn.close()
+                from flask import make_response
+                response = make_response(csv_content)
+                response.headers['Content-Disposition'] = 'attachment; filename=equipment_export.csv'
+                response.headers['Content-Type'] = 'text/csv'
+                return response
+    
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log ORDER BY checkout_date DESC LIMIT 1000"
+    )
+    checkout_log = cursor.fetchall()
+    conn.close()
+    
+    return render_template('settings.html', checkout_log=checkout_log)
 
 if __name__ == '__main__':
     init_db()

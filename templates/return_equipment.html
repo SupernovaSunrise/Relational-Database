@@ -10,6 +10,24 @@
         <label for="search">Search checked-out items</label>
         <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment, item, or customer">
     </div>
+    <div class="form-group" style="min-width: 150px;">
+        <label for="sort_by">Sort By</label>
+        <select id="sort_by" name="sort_by">
+            <option value="due_date" {% if sort_by == 'due_date' %}selected{% endif %}>Due Date</option>
+            <option value="equipment_id" {% if sort_by == 'equipment_id' %}selected{% endif %}>Equipment ID</option>
+            <option value="item_name" {% if sort_by == 'item_name' %}selected{% endif %}>Item Name</option>
+            <option value="customer_name" {% if sort_by == 'customer_name' %}selected{% endif %}>Customer Name</option>
+            <option value="checked_out_date" {% if sort_by == 'checked_out_date' %}selected{% endif %}>Checked Out Date</option>
+            <option value="customer_zip" {% if sort_by == 'customer_zip' %}selected{% endif %}>Customer Zip</option>
+        </select>
+    </div>
+    <div class="form-group" style="min-width: 100px;">
+        <label for="sort_dir">Order</label>
+        <select id="sort_dir" name="sort_dir">
+            <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
+            <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
+        </select>
+    </div>
     <button type="submit" class="btn">Search</button>
     <a href="{{ url_for('return_equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
@@ -23,6 +41,7 @@
             <th>Customer</th>
             <th>Checked Out Date</th>
             <th>Due Date</th>
+            <th>Zip Code</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -34,6 +53,7 @@
             <td>{{ item.name }}</td>
             <td>{{ item.checked_out_date }}</td>
             <td>{{ item.due_date }}</td>
+            <td>{{ item.zip_code }}</td>
             <td>
                 <form method="POST" style="margin:0; display:inline;">
                     <input type="hidden" name="loan_id" value="{{ item.id }}">

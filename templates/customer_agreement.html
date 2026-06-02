@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  @media print {
+    body * { visibility: hidden !important; }
+    #agreement-card, #agreement-card * { visibility: visible !important; }
+    #agreement-card { position: absolute; left: 0; top: 0; width: 100%; }
+    .no-print { display: none !important; }
+  }
+</style>
+
+<h2>Customer Agreement</h2>
+<div class="card" id="agreement-card">
+  <div class="card-body">
+    <p><strong>Customer:</strong> {{ customer['name'] }} ({{ customer['phone'] }})</p>
+    <p><strong>Zip:</strong> {{ customer['zip_code'] }}</p>
+    {% if due_date %}
+      <p><strong>Return By:</strong> {{ due_date }} ({{ checkout_period_days }} days)</p>
+    {% endif %}
+    {% if equipment_id %}
+      <p><strong>Equipment:</strong> {{ equipment_id }}{% if item_name %} — {{ item_name }}{% endif %}</p>
+    {% endif %}
+
+    <h4>General Terms of Use and Loan Agreement</h4>
+    <p>The terms and conditions described below are a contractual agreement between you and the NW MT Veterans Stand Down and Food Pantry LLC-DME Loan Program. I understand and agree that the agreement unless special arrangements are made prior to such date. I accept responsibility for equipment loaned to me. I understand that the use of any equipment is at the recipient's own risk. In no event will NW Montana Veterans Stand Down and Food Pantry LLC, be liable to any direct, indirect, or other consequential damages, or injuries from the use of the DME Loan Program. I understand that I am completely responsible for the proper and safe use of all equipment loaned to me by the DME Loan Program.</p>
+    <p>I understand that if I am an Occupational Therapist/Physical Therapist, I am also responsible for the equipment out on loan. In either getting the equipment returned or paid for by the due date.</p>
+
+    <form method="post" onsubmit="prepareSignature()">
+      <input type="hidden" name="signature_data" id="signature_data">
+      {% if loan_id %}
+        <input type="hidden" name="loan_id" value="{{ loan_id }}">
+      {% endif %}
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="waiver_agreed" name="waiver_agreed">
+        <label class="form-check-label" for="waiver_agreed">I agree to the General Terms of Use and Loan Agreement</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="signature_agreed" name="signature_agreed">
+        <label class="form-check-label" for="signature_agreed">I acknowledge this digital signature</label>
+      </div>
+
+      <div class="mt-3">
+        <label>Signature:</label>
+        <div>
+          <canvas id="sigCanvas" width="600" height="200"></canvas>
+        </div>
+        <div class="mt-2">
+          <button type="button" class="btn btn-secondary" onclick="clearSig()">Clear</button>
+        </div>
+      </div>
+
+      <div class="mt-3 no-print">
+        <button type="submit" class="btn btn-primary">Save Agreement</button>
+        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Print</button>
+        <a class="btn btn-link" href="/customers">Done</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let canvas = document.getElementById('sigCanvas');
+let ctx = canvas.getContext('2d');
+let drawing = false;
+function pointerDown(e){ drawing = true; ctx.beginPath(); ctx.moveTo(getX(e), getY(e)); }
+function pointerUp(e){ drawing = false; }
+function pointerMove(e){ if(!drawing) return; ctx.lineTo(getX(e), getY(e)); ctx.stroke(); }
+function getX(e){ return (e.touches ? e.touches[0].clientX : e.clientX) - canvas.getBoundingClientRect().left; }
+function getY(e){ return (e.touches ? e.touches[0].clientY : e.clientY) - canvas.getBoundingClientRect().top; }
+canvas.addEventListener('mousedown', pointerDown);
+canvas.addEventListener('mouseup', pointerUp);
+canvas.addEventListener('mouseout', pointerUp);
+canvas.addEventListener('mousemove', pointerMove);
+canvas.addEventListener('touchstart', pointerDown);
+canvas.addEventListener('touchend', pointerUp);
+canvas.addEventListener('touchcancel', pointerUp);
+canvas.addEventListener('touchmove', pointerMove);
+function clearSig(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
+function prepareSignature(){
+  let data = canvas.toDataURL('image/png');
+  document.getElementById('signature_data').value = data;
+}
+</script>
+{% endblock %}

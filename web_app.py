@@ -1,8 +1,27 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 import sqlite3
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+try:
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    HAVE_OPENPYXL = True
+except Exception:
+    Workbook = None
+    load_workbook = None
+    Font = PatternFill = Alignment = None
+    HAVE_OPENPYXL = False
+
+from io import BytesIO
+import os
+try:
+    import pandas as pd
+    HAVE_PANDAS = True
+except Exception:
+    pd = None
+    HAVE_PANDAS = False
+import base64
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this in production
@@ -79,6 +98,37 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_equipment_status ON loans(equipment_id, returned_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_customer_status ON loans(customer_id, returned_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_checkout_log_date ON checkout_log(checkout_date)")
+    
+    # Create agreements table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_agreements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL,
+            loan_id INTEGER,
+            waiver_agreed INTEGER DEFAULT 0,
+            digital_signature_agreed INTEGER DEFAULT 0,
+            signature_data TEXT,
+            agreed_date TEXT NOT NULL,
+            FOREIGN KEY(customer_id) REFERENCES customers(id),
+            FOREIGN KEY(loan_id) REFERENCES loans(id)
+        )
+        """
+    )
+    
+    # Create deleted items audit log table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS deleted_items_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipment_id TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            deletion_date TEXT NOT NULL
+        )
+        """
+    )
+    
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items_log(deletion_date)")
     conn.commit()
     conn.close()
 
@@ -144,6 +194,17 @@ def master_control():
 
             conn = connect_db()
             cursor = conn.cursor()
+            
+            # Check for duplicate customers (same name and phone)
+            cursor.execute(
+                "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
+                (name, f"%{digits}%"),
+            )
+            if cursor.fetchone():
+                conn.close()
+                flash('A customer with this name and phone number already exists.')
+                return redirect(url_for('master_control'))
+            
             try:
                 cursor.execute(
                     "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
@@ -226,13 +287,14 @@ def master_control():
                     "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date) VALUES (?, ?, ?, ?)",
                     (customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat()),
                 )
+                loan_id = cursor.lastrowid
                 cursor.execute(
                     "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date) VALUES (?, ?, ?, ?)",
                     (customer_zip, item_name, equipment_id, checked_out_date.isoformat()),
                 )
                 conn.commit()
                 conn.close()
-                flash(f'Equipment {equipment_id} checked out until {due_date.isoformat()}.')
+                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
 
         elif action == 'return':
             loan_id = request.form['loan_id']
@@ -343,6 +405,17 @@ def add_customer():
 
         conn = connect_db()
         cursor = conn.cursor()
+        
+        # Check for duplicate customers (same name and phone)
+        cursor.execute(
+            "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
+            (name, f"%{digits}%"),
+        )
+        if cursor.fetchone():
+            conn.close()
+            flash('A customer with this name and phone number already exists.')
+            return redirect(url_for('add_customer'))
+        
         try:
             cursor.execute(
                 "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
@@ -449,6 +522,17 @@ def delete_equipment(equipment_id):
         flash('Cannot delete equipment while it is checked out.')
         return redirect(url_for('equipment'))
 
+    # Get item name before deleting
+    cursor.execute("SELECT item_name FROM equipment WHERE equipment_id = ?", (equipment_id,))
+    row = cursor.fetchone()
+    item_name = row["item_name"] if row else equipment_id
+    
+    # Log the deleted item
+    cursor.execute(
+        "INSERT INTO deleted_items_log (equipment_id, item_name, deletion_date) VALUES (?, ?, ?)",
+        (equipment_id, item_name, datetime.today().date().isoformat()),
+    )
+    
     cursor.execute("DELETE FROM equipment WHERE equipment_id = ?", (equipment_id,))
     conn.commit()
     conn.close()
@@ -488,11 +572,15 @@ def checkout():
             "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date) VALUES (?, ?, ?, ?)",
             (customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat()),
         )
+        loan_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date) VALUES (?, ?, ?, ?)",
+            (None, equipment_id, equipment_id, checked_out_date.isoformat()),
+        )
         conn.commit()
         conn.close()
 
-        flash(f'Equipment {equipment_id} checked out until {due_date.isoformat()}.')
-        return redirect(url_for('checked_out'))
+        return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
 
     customer_search = request.args.get('customer_search', '').strip()
     equipment_search = request.args.get('equipment_search', '').strip()
@@ -561,6 +649,20 @@ def return_equipment():
         return redirect(url_for('checked_out'))
 
     search = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'due_date')
+    sort_dir = request.args.get('sort_dir', 'asc')
+    
+    sort_options = {
+        'equipment_id': 'loans.equipment_id',
+        'item_name': 'equipment.item_name',
+        'customer_name': 'customers.name',
+        'checked_out_date': 'loans.checked_out_date',
+        'due_date': 'loans.due_date',
+        'customer_zip': 'customers.zip_code',
+    }
+    sort_column = sort_options.get(sort_by, 'loans.due_date')
+    sort_direction = 'DESC' if sort_dir == 'desc' else 'ASC'
+    
     conn = connect_db()
     cursor = conn.cursor()
     query = (
@@ -579,12 +681,18 @@ def return_equipment():
             "OR customers.name LIKE ? OR customers.zip_code LIKE ?) "
         )
         params = (search_pattern, search_pattern, search_pattern, search_pattern)
-    query += "ORDER BY loans.due_date"
+    query += f"ORDER BY {sort_column} {sort_direction}"
     cursor.execute(query, params)
     checked_out_list = cursor.fetchall()
     conn.close()
 
-    return render_template('return_equipment.html', checked_out=checked_out_list, search=search)
+    return render_template(
+        'return_equipment.html',
+        checked_out=checked_out_list,
+        search=search,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
 
 @app.route('/checked_out')
 def checked_out():
@@ -594,7 +702,135 @@ def checked_out():
 def settings():
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == 'export':
+        
+        if action == 'import_customers':
+            if 'file' not in request.files:
+                flash('No file part')
+                return redirect(url_for('settings'))
+            file = request.files['file']
+            if file.filename == '':
+                flash('No selected file')
+                return redirect(url_for('settings'))
+            if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+                try:
+                    conn = connect_db()
+                    cursor = conn.cursor()
+                    count = 0
+                    if file.filename.endswith('.xls'):
+                        # use pandas for old .xls files
+                        if not HAVE_PANDAS:
+                            flash('Pandas is not available on the server; cannot import .xls files. Install pandas.')
+                        else:
+                            df = pd.read_excel(file)
+                            for _, row in df.iterrows():
+                                try:
+                                    name = row.iloc[0]
+                                    phone = row.iloc[1]
+                                    zip_code = row.iloc[2]
+                                except Exception:
+                                    continue
+                                if name and phone and zip_code:
+                                    digits = re.sub(r"\D", "", str(phone))
+                                    if len(digits) >= 10 and re.fullmatch(r"\d{5}", str(zip_code)):
+                                        cursor.execute(
+                                            "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
+                                            (name, f"%{digits}%"),
+                                        )
+                                        if not cursor.fetchone():
+                                            cursor.execute(
+                                                "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
+                                                (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
+                                            )
+                                            count += 1
+                    else:
+                        wb = load_workbook(file)
+                        ws = wb.active
+                        for row in ws.iter_rows(min_row=2, values_only=True):
+                            if row[0] and row[1] and row[2]:
+                                name, phone, zip_code = row[0], row[1], row[2]
+                                digits = re.sub(r"\D", "", str(phone))
+                                if len(digits) >= 10 and re.fullmatch(r"\d{5}", str(zip_code)):
+                                    cursor.execute(
+                                        "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
+                                        (name, f"%{digits}%"),
+                                    )
+                                    if not cursor.fetchone():
+                                        cursor.execute(
+                                            "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
+                                            (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
+                                        )
+                                        count += 1
+                    conn.commit()
+                    conn.close()
+                    flash(f'Imported {count} new customers successfully.')
+                except Exception as e:
+                    flash(f'Error importing file: {str(e)}')
+            else:
+                flash('File must be .xlsx or .xls format')
+            return redirect(url_for('settings'))
+        
+        elif action == 'import_equipment':
+            if 'file' not in request.files:
+                flash('No file part')
+                return redirect(url_for('settings'))
+            file = request.files['file']
+            if file.filename == '':
+                flash('No selected file')
+                return redirect(url_for('settings'))
+            if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+                try:
+                    conn = connect_db()
+                    cursor = conn.cursor()
+                    count = 0
+                    if file.filename.endswith('.xls'):
+                        if not HAVE_PANDAS:
+                            flash('Pandas is not available on the server; cannot import .xls files. Install pandas.')
+                        else:
+                            df = pd.read_excel(file)
+                            for _, row in df.iterrows():
+                                try:
+                                    equipment_id = str(row.iloc[0]).upper()
+                                    item_name = str(row.iloc[1])
+                                except Exception:
+                                    continue
+                                if equipment_id and item_name and EQUIPMENT_ID_PATTERN.fullmatch(equipment_id):
+                                    cursor.execute(
+                                        "SELECT id FROM equipment WHERE equipment_id = ?",
+                                        (equipment_id,),
+                                    )
+                                    if not cursor.fetchone():
+                                        cursor.execute(
+                                            "INSERT INTO equipment (equipment_id, item_name) VALUES (?, ?)",
+                                            (equipment_id, item_name),
+                                        )
+                                        count += 1
+                    else:
+                        wb = load_workbook(file)
+                        ws = wb.active
+                        for row in ws.iter_rows(min_row=2, values_only=True):
+                            if row[0] and row[1]:
+                                equipment_id, item_name = str(row[0]).upper(), str(row[1])
+                                if EQUIPMENT_ID_PATTERN.fullmatch(equipment_id):
+                                    cursor.execute(
+                                        "SELECT id FROM equipment WHERE equipment_id = ?",
+                                        (equipment_id,),
+                                    )
+                                    if not cursor.fetchone():
+                                        cursor.execute(
+                                            "INSERT INTO equipment (equipment_id, item_name) VALUES (?, ?)",
+                                            (equipment_id, item_name),
+                                        )
+                                        count += 1
+                    conn.commit()
+                    conn.close()
+                    flash(f'Imported {count} new equipment items successfully.')
+                except Exception as e:
+                    flash(f'Error importing file: {str(e)}')
+            else:
+                flash('File must be .xlsx or .xls format')
+            return redirect(url_for('settings'))
+        
+        elif action == 'export':
             export_type = request.form.get('export_type')
             conn = connect_db()
             cursor = conn.cursor()
@@ -602,38 +838,188 @@ def settings():
             if export_type == 'customers':
                 cursor.execute("SELECT id, name, phone, zip_code, date_added FROM customers ORDER BY id")
                 rows = cursor.fetchall()
-                csv_content = "ID,Name,Phone,ZipCode,DateAdded\n"
-                for row in rows:
-                    csv_content += f"{row['id']},{row['name']},{row['phone']},{row['zip_code']},{row['date_added']}\n"
                 conn.close()
-                from flask import make_response
-                response = make_response(csv_content)
-                response.headers['Content-Disposition'] = 'attachment; filename=customers_export.csv'
-                response.headers['Content-Type'] = 'text/csv'
-                return response
+                # Prefer XLSX if openpyxl available, otherwise export CSV
+                if HAVE_OPENPYXL:
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "Customers"
+                    ws.append(['ID', 'Name', 'Phone', 'ZipCode', 'DateAdded'])
+                    for row in rows:
+                        ws.append([row['id'], row['name'], row['phone'], row['zip_code'], row['date_added']])
+                    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                    header_font = Font(bold=True, color="FFFFFF")
+                    for cell in ws[1]:
+                        cell.fill = header_fill
+                        cell.font = header_font
+                    output = BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+                    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='customers_export.xlsx')
+                else:
+                    # Fallback CSV
+                    import csv
+                    output = BytesIO()
+                    writer = csv.writer(output)
+                    writer.writerow(['ID', 'Name', 'Phone', 'ZipCode', 'DateAdded'])
+                    for row in rows:
+                        writer.writerow([row['id'], row['name'], row['phone'], row['zip_code'], row['date_added']])
+                    output.seek(0)
+                    return send_file(output, mimetype='text/csv', as_attachment=True, download_name='customers_export.csv')
             
             elif export_type == 'equipment':
                 cursor.execute("SELECT equipment_id, item_name FROM equipment ORDER BY equipment_id")
                 rows = cursor.fetchall()
-                csv_content = "EquipmentID,ItemName\n"
-                for row in rows:
-                    csv_content += f"{row['equipment_id']},{row['item_name']}\n"
                 conn.close()
-                from flask import make_response
-                response = make_response(csv_content)
-                response.headers['Content-Disposition'] = 'attachment; filename=equipment_export.csv'
-                response.headers['Content-Type'] = 'text/csv'
-                return response
+                if HAVE_OPENPYXL:
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "Equipment"
+                    ws.append(['EquipmentID', 'ItemName'])
+                    for row in rows:
+                        ws.append([row['equipment_id'], row['item_name']])
+                    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                    header_font = Font(bold=True, color="FFFFFF")
+                    for cell in ws[1]:
+                        cell.fill = header_fill
+                        cell.font = header_font
+                    output = BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+                    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='equipment_export.xlsx')
+                else:
+                    import csv
+                    output = BytesIO()
+                    writer = csv.writer(output)
+                    writer.writerow(['EquipmentID', 'ItemName'])
+                    for row in rows:
+                        writer.writerow([row['equipment_id'], row['item_name']])
+                    output.seek(0)
+                    return send_file(output, mimetype='text/csv', as_attachment=True, download_name='equipment_export.csv')
+    
+    return render_template('settings.html')
+
+@app.route('/reports', methods=['GET'])
+def reports():
+    report_type = request.args.get('report_type', 'checkout')
+    year_filter = request.args.get('year_filter', '')
     
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log ORDER BY checkout_date DESC LIMIT 1000"
-    )
-    checkout_log = cursor.fetchall()
+    
+    if report_type == 'checkout':
+        query = "SELECT customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log WHERE 1=1"
+        params = ()
+        if year_filter:
+            query += " AND strftime('%Y', checkout_date) = ?"
+            params = (year_filter,)
+        query += " ORDER BY checkout_date DESC"
+        cursor.execute(query, params)
+        report_data = cursor.fetchall()
+        report_title = "Checkout Log"
+    else:  # item_sales
+        query = "SELECT equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1"
+        params = ()
+        if year_filter:
+            query += " AND strftime('%Y', deletion_date) = ?"
+            params = (year_filter,)
+        query += " ORDER BY deletion_date DESC"
+        cursor.execute(query, params)
+        report_data = cursor.fetchall()
+        report_title = "Item Sales Log"
+    
+    # Get available years
+    if report_type == 'checkout':
+        cursor.execute("SELECT DISTINCT strftime('%Y', checkout_date) as year FROM checkout_log ORDER BY year DESC")
+    else:
+        cursor.execute("SELECT DISTINCT strftime('%Y', deletion_date) as year FROM deleted_items_log ORDER BY year DESC")
+    
+    years = [row['year'] for row in cursor.fetchall() if row['year']]
     conn.close()
     
-    return render_template('settings.html', checkout_log=checkout_log)
+    return render_template(
+        'reports.html',
+        report_data=report_data,
+        report_type=report_type,
+        report_title=report_title,
+        year_filter=year_filter,
+        years=years,
+    )
+
+@app.route('/customer_agreement/<int:customer_id>', methods=['GET', 'POST'])
+def customer_agreement(customer_id):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, phone, zip_code FROM customers WHERE id = ?", (customer_id,))
+    customer = cursor.fetchone()
+    conn.close()
+    
+    if not customer:
+        flash('Customer not found.')
+        return redirect(url_for('customers'))
+    
+    loan_id = request.args.get('loan_id')
+    equipment_id = None
+    item_name = None
+    if loan_id:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT loans.equipment_id, equipment.item_name FROM loans "
+            "LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
+            "WHERE loans.id = ?",
+            (loan_id,)
+        )
+        loan_row = cursor.fetchone()
+        conn.close()
+        if loan_row:
+            equipment_id = loan_row['equipment_id']
+            item_name = loan_row['item_name']
+    
+    if request.method == 'POST':
+        waiver_agreed = 'waiver_agreed' in request.form
+        signature_agreed = 'signature_agreed' in request.form
+        signature_data = request.form.get('signature_data', '')
+        loan_id = request.form.get('loan_id') or loan_id
+        
+        if not waiver_agreed or not signature_agreed:
+            flash('You must agree to both the waiver and digital signature acknowledgement.')
+            return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
+        
+        if not signature_data:
+            flash('Please provide a digital signature.')
+            return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
+        
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO customer_agreements (customer_id, loan_id, waiver_agreed, digital_signature_agreed, signature_data, agreed_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (customer_id, loan_id, 1 if waiver_agreed else 0, 1 if signature_agreed else 0, signature_data, datetime.today().date().isoformat()),
+        )
+        conn.commit()
+        conn.close()
+        flash('Customer agreement recorded successfully.')
+        return redirect(url_for('customers'))
+    
+    due_date = None
+    if loan_id:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT due_date FROM loans WHERE id = ?", (loan_id,))
+        loan_row = cursor.fetchone()
+        conn.close()
+        if loan_row:
+            due_date = loan_row['due_date']
+
+    return render_template(
+        'customer_agreement.html',
+        customer=customer,
+        loan_id=loan_id,
+        due_date=due_date,
+        checkout_period_days=CHECKOUT_PERIOD_DAYS,
+        equipment_id=equipment_id,
+        item_name=item_name,
+    )
 
 if __name__ == '__main__':
     init_db()

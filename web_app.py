@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 import sqlite3
 import re
 from datetime import datetime, timedelta
@@ -935,16 +935,6 @@ def customer_agreement(customer_id):
             loans = [loan_row]
             due_date = loan_row['due_date']
 
-    conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT equipment.equipment_id, equipment.item_name FROM equipment "
-        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
-        "WHERE loans.id IS NULL ORDER BY equipment.equipment_id"
-    )
-    available_equipment = cursor.fetchall()
-    conn.close()
-
     if request.method == 'POST':
         action = request.form.get('action', 'save')
         loan_ids_csv = request.form.get('loan_ids') or loan_ids_csv
@@ -1039,8 +1029,35 @@ def customer_agreement(customer_id):
         due_date=due_date,
         checkout_period_days=CHECKOUT_PERIOD_DAYS,
         loans=loans,
-        available_equipment=available_equipment,
     )
+
+
+@app.route('/api/equipment_search')
+def equipment_search():
+    q = request.args.get('q', '').strip()
+    try:
+        limit = int(request.args.get('limit', 20))
+    except Exception:
+        limit = 20
+    conn = connect_db()
+    cursor = conn.cursor()
+    params = []
+    query = (
+        "SELECT equipment.equipment_id, equipment.item_name FROM equipment "
+        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
+        "WHERE loans.id IS NULL "
+    )
+    if q:
+        qpat = f"%{q}%"
+        query += "AND (equipment.equipment_id LIKE ? OR equipment.item_name LIKE ?) "
+        params.extend([qpat, qpat])
+    query += "ORDER BY equipment.equipment_id LIMIT ?"
+    params.append(limit)
+    cursor.execute(query, tuple(params))
+    rows = cursor.fetchall()
+    conn.close()
+    results = [{"equipment_id": r["equipment_id"], "item_name": r["item_name"]} for r in rows]
+    return jsonify(results)
 
 @app.route('/agreement_view/<int:loan_id>')
 def agreement_view(loan_id):

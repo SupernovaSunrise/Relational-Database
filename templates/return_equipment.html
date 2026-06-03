@@ -42,6 +42,7 @@
             <th>Checked Out Date</th>
             <th>Due Date</th>
             <th>Zip Code</th>
+            <th>Agreement</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -54,6 +55,13 @@
             <td>{{ item.checked_out_date }}</td>
             <td>{{ item.due_date }}</td>
             <td>{{ item.zip_code }}</td>
+            <td>
+                {% if item.agreement_data %}
+                    <a class="btn" href="{{ url_for('agreement_view', loan_id=item.id) }}" target="_blank">View Agreement</a>
+                {% else %}
+                    <span style="color: #666;">None</span>
+                {% endif %}
+            </td>
             <td>
                 <form method="POST" style="margin:0; display:inline;">
                     <input type="hidden" name="loan_id" value="{{ item.id }}">

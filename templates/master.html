@@ -18,7 +18,7 @@
 {% if checkout_candidates %}
 <section style="margin-bottom: 20px; padding: 20px; border: 1px solid #ffc107; border-radius: 8px; background: #fff8e1;">
     <h2>Confirm Customer Selection</h2>
-    <p>Multiple customers match "<strong>{{ pending_customer_reference }}</strong>". Select the correct customer for equipment <strong>{{ pending_equipment_id }}</strong>:</p>
+    <p>Multiple customers match "<strong>{{ pending_customer_reference }}</strong>". Select the correct customer for the selected equipment:</p>
     <table>
         <thead>
             <tr>
@@ -39,7 +39,9 @@
                 <td>
                     <form method="POST" style="margin:0;">
                         <input type="hidden" name="action" value="checkout">
-                        <input type="hidden" name="equipment_id" value="{{ pending_equipment_id }}">
+                        {% for equipment_id in pending_equipment_ids %}
+                        <input type="hidden" name="equipment_ids" value="{{ equipment_id }}">
+                        {% endfor %}
                         <input type="hidden" name="customer_reference" value="{{ customer.id }}">
                         <button type="submit" class="btn">Select</button>
                     </form>
@@ -51,7 +53,7 @@
 </section>
 {% endif %}
 
-<div style="display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 30px;">
+<div style="display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-bottom: 30px;">
     <section style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
         <h2>Add Customer</h2>
         <form method="POST">

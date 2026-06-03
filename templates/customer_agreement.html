@@ -17,8 +17,38 @@
     {% if due_date %}
       <p><strong>Return By:</strong> {{ due_date }} ({{ checkout_period_days }} days)</p>
     {% endif %}
-    {% if equipment_id %}
-      <p><strong>Equipment:</strong> {{ equipment_id }}{% if item_name %} — {{ item_name }}{% endif %}</p>
+    {% if loans %}
+      <p><strong>Equipment:</strong></p>
+      <ul>
+        {% for loan in loans %}
+          <li>{{ loan.equipment_id }}{% if loan.item_name %} — {{ loan.item_name }}{% endif %}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if available_equipment %}
+    <div class="mt-4" style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
+      <h5>Add Additional Equipment</h5>
+      <form method="post">
+        <input type="hidden" name="action" value="add_equipment">
+        {% if loan_ids %}
+          <input type="hidden" name="loan_ids" value="{{ loan_ids }}">
+        {% endif %}
+        {% if loan_id and not loan_ids %}
+          <input type="hidden" name="loan_id" value="{{ loan_id }}">
+        {% endif %}
+        <div style="display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+          {% for item in available_equipment %}
+          <label style="border: 1px solid #ddd; border-radius: 6px; padding: 10px; display: block; background: white; cursor: pointer;">
+            <input type="checkbox" name="equipment_ids" value="{{ item.equipment_id }}" style="margin-right: 6px;"> {{ item.equipment_id }} - {{ item.item_name }}
+          </label>
+          {% endfor %}
+        </div>
+        <div class="mt-3 no-print">
+          <button type="submit" class="btn">Add Equipment</button>
+        </div>
+      </form>
+    </div>
     {% endif %}
 
     <h4>General Terms of Use and Loan Agreement</h4>
@@ -27,7 +57,10 @@
 
     <form method="post" onsubmit="prepareSignature()">
       <input type="hidden" name="signature_data" id="signature_data">
-      {% if loan_id %}
+      {% if loan_ids %}
+        <input type="hidden" name="loan_ids" value="{{ loan_ids }}">
+      {% endif %}
+      {% if loan_id and not loan_ids %}
         <input type="hidden" name="loan_id" value="{{ loan_id }}">
       {% endif %}
       <div class="form-check">
@@ -52,7 +85,7 @@
       <div class="mt-3 no-print">
         <button type="submit" class="btn btn-primary">Save Agreement</button>
         <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Print</button>
-        <a class="btn btn-link" href="/customers">Done</a>
+        <a class="btn btn-link" href="{{ url_for('master_control') }}">Done</a>
       </div>
     </form>
   </div>

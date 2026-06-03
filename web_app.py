@@ -98,6 +98,12 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_equipment_status ON loans(equipment_id, returned_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_customer_status ON loans(customer_id, returned_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_checkout_log_date ON checkout_log(checkout_date)")
+    cursor.execute("PRAGMA table_info(loans)")
+    loan_columns = [column[1] for column in cursor.fetchall()]
+    if "agreement_data" not in loan_columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN agreement_data TEXT")
+    if "agreement_date" not in loan_columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN agreement_date TEXT")
     
     # Create agreements table
     cursor.execute(
@@ -169,7 +175,7 @@ def index():
 @app.route('/master', methods=['GET', 'POST'])
 def master_control():
     checkout_candidates = None
-    pending_equipment_id = None
+    pending_equipment_ids = []
     pending_customer_reference = None
 
     if request.method == 'POST':
@@ -244,11 +250,16 @@ def master_control():
                 conn.close()
 
         elif action == 'checkout':
-            equipment_id = request.form['equipment_id'].strip().upper()
             customer_reference = request.form['customer_reference'].strip()
+            equipment_ids = request.form.getlist('equipment_ids')
+            if not equipment_ids:
+                equipment_id = request.form.get('equipment_id', '').strip().upper()
+                if equipment_id:
+                    equipment_ids = [equipment_id]
+            equipment_ids = [eid.strip().upper() for eid in equipment_ids if eid.strip()]
 
-            if not equipment_id or not customer_reference:
-                flash('Please enter both equipment ID and customer reference.')
+            if not customer_reference or not equipment_ids:
+                flash('Please enter a customer reference and select at least one piece of equipment.')
                 return redirect(url_for('master_control'))
 
             matches = find_customer_matches(customer_reference)
@@ -257,7 +268,7 @@ def master_control():
                 return redirect(url_for('master_control'))
 
             if len(matches) > 1:
-                pending_equipment_id = equipment_id
+                pending_equipment_ids = equipment_ids
                 pending_customer_reference = customer_reference
                 checkout_candidates = matches
             else:
@@ -265,36 +276,42 @@ def master_control():
                 customer_zip = matches[0]["zip_code"]
                 conn = connect_db()
                 cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT id FROM loans WHERE equipment_id = ? AND returned_date IS NULL",
-                    (equipment_id,)
-                )
-                if cursor.fetchone():
-                    conn.close()
-                    flash('Equipment is already checked out.')
-                    return redirect(url_for('master_control'))
-
-                cursor.execute(
-                    "SELECT item_name FROM equipment WHERE equipment_id = ?",
-                    (equipment_id,)
-                )
-                equipment_row = cursor.fetchone()
-                item_name = equipment_row["item_name"] if equipment_row else equipment_id
-
                 checked_out_date = datetime.today().date()
                 due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
-                cursor.execute(
-                    "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date) VALUES (?, ?, ?, ?)",
-                    (customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat()),
-                )
-                loan_id = cursor.lastrowid
-                cursor.execute(
-                    "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date) VALUES (?, ?, ?, ?)",
-                    (customer_zip, item_name, equipment_id, checked_out_date.isoformat()),
-                )
+                loan_ids = []
+                for equipment_id in equipment_ids:
+                    cursor.execute(
+                        "SELECT equipment_id, item_name FROM equipment WHERE equipment_id = ?",
+                        (equipment_id,)
+                    )
+                    equipment_row = cursor.fetchone()
+                    if not equipment_row:
+                        conn.close()
+                        flash(f'Equipment {equipment_id} does not exist.')
+                        return redirect(url_for('master_control'))
+
+                    cursor.execute(
+                        "SELECT id FROM loans WHERE equipment_id = ? AND returned_date IS NULL",
+                        (equipment_id,)
+                    )
+                    if cursor.fetchone():
+                        conn.close()
+                        flash(f'Equipment {equipment_id} is already checked out.')
+                        return redirect(url_for('master_control'))
+
+                    cursor.execute(
+                        "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date) VALUES (?, ?, ?, ?, ?, ?)",
+                        (customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat(), None, None),
+                    )
+                    loan_id = cursor.lastrowid
+                    loan_ids.append(str(loan_id))
+                    cursor.execute(
+                        "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date) VALUES (?, ?, ?, ?)",
+                        (customer_zip, equipment_row["item_name"], equipment_id, checked_out_date.isoformat()),
+                    )
                 conn.commit()
                 conn.close()
-                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
+                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=','.join(loan_ids)))
 
         elif action == 'return':
             loan_id = request.form['loan_id']
@@ -349,6 +366,13 @@ def master_control():
     query += f"ORDER BY {sort_column} {sort_direction}"
     cursor.execute(query, params)
     rows = cursor.fetchall()
+
+    cursor.execute(
+        "SELECT equipment.equipment_id, equipment.item_name FROM equipment "
+        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
+        "WHERE loans.id IS NULL ORDER BY equipment.equipment_id"
+    )
+    available_equipment = cursor.fetchall()
     conn.close()
 
     return render_template(
@@ -358,8 +382,9 @@ def master_control():
         sort_by=sort_by,
         sort_dir=sort_dir,
         checkout_candidates=checkout_candidates,
-        pending_equipment_id=pending_equipment_id,
+        pending_equipment_ids=pending_equipment_ids,
         pending_customer_reference=pending_customer_reference,
+        available_equipment=available_equipment,
     )
 
 @app.route('/customers')
@@ -541,90 +566,7 @@ def delete_equipment(equipment_id):
 
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
-    if request.method == 'POST':
-        customer_reference = request.form['customer_reference'].strip()
-        equipment_id = request.form['equipment_id'].strip().upper()
-
-        if not customer_reference or not equipment_id:
-            flash('Please enter both customer reference and equipment ID.')
-            return redirect(url_for('checkout'))
-
-        customer_id = resolve_customer_reference(customer_reference)
-        if not customer_id:
-            flash('Customer not found. Use an existing ID, name, or phone.')
-            return redirect(url_for('checkout'))
-
-        conn = connect_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id FROM loans WHERE equipment_id = ? AND returned_date IS NULL",
-            (equipment_id,)
-        )
-        if cursor.fetchone():
-            conn.close()
-            flash('Equipment is already checked out.')
-            return redirect(url_for('checkout'))
-
-        checked_out_date = datetime.today().date()
-        due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
-
-        cursor.execute(
-            "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date) VALUES (?, ?, ?, ?)",
-            (customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat()),
-        )
-        loan_id = cursor.lastrowid
-        cursor.execute(
-            "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date) VALUES (?, ?, ?, ?)",
-            (None, equipment_id, equipment_id, checked_out_date.isoformat()),
-        )
-        conn.commit()
-        conn.close()
-
-        return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
-
-    customer_search = request.args.get('customer_search', '').strip()
-    equipment_search = request.args.get('equipment_search', '').strip()
-
-    conn = connect_db()
-    cursor = conn.cursor()
-
-    if customer_search:
-        customer_pattern = f"%{customer_search}%"
-        cursor.execute(
-            "SELECT id, name, phone FROM customers "
-            "WHERE name LIKE ? OR phone LIKE ? OR zip_code LIKE ? "
-            "ORDER BY name LIMIT 100",
-            (customer_pattern, customer_pattern, customer_pattern),
-        )
-    else:
-        cursor.execute("SELECT id, name, phone FROM customers ORDER BY name LIMIT 100")
-    customers_list = cursor.fetchall()
-
-    if equipment_search:
-        equipment_pattern = f"%{equipment_search}%"
-        cursor.execute(
-            "SELECT equipment.equipment_id, equipment.item_name FROM equipment "
-            "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
-            "WHERE loans.id IS NULL AND (equipment.equipment_id LIKE ? OR equipment.item_name LIKE ?) "
-            "ORDER BY equipment.equipment_id LIMIT 100",
-            (equipment_pattern, equipment_pattern),
-        )
-    else:
-        cursor.execute(
-            "SELECT equipment.equipment_id, equipment.item_name FROM equipment "
-            "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
-            "WHERE loans.id IS NULL ORDER BY equipment.equipment_id LIMIT 100"
-        )
-    available_equipment = cursor.fetchall()
-
-    conn.close()
-    return render_template(
-        'checkout.html',
-        customers=customers_list,
-        equipment=available_equipment,
-        customer_search=customer_search,
-        equipment_search=equipment_search,
-    )
+    return redirect(url_for('master_control'))
 
 @app.route('/return_equipment', methods=['GET', 'POST'])
 def return_equipment():
@@ -639,7 +581,7 @@ def return_equipment():
         conn = connect_db()
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE loans SET returned_date = ? WHERE id = ?",
+            "UPDATE loans SET returned_date = ?, agreement_data = NULL WHERE id = ?",
             (returned_date, loan_id),
         )
         conn.commit()
@@ -667,7 +609,7 @@ def return_equipment():
     cursor = conn.cursor()
     query = (
         "SELECT loans.id, loans.equipment_id, equipment.item_name, customers.name, "
-        "customers.zip_code, loans.checked_out_date, loans.due_date "
+        "customers.zip_code, loans.checked_out_date, loans.due_date, loans.agreement_data "
         "FROM loans "
         "JOIN equipment ON loans.equipment_id = equipment.equipment_id "
         "JOIN customers ON loans.customer_id = customers.id "
@@ -953,19 +895,36 @@ def customer_agreement(customer_id):
     cursor.execute("SELECT id, name, phone, zip_code FROM customers WHERE id = ?", (customer_id,))
     customer = cursor.fetchone()
     conn.close()
-    
+
     if not customer:
         flash('Customer not found.')
         return redirect(url_for('customers'))
-    
+
+    loan_ids_csv = request.args.get('loan_ids')
     loan_id = request.args.get('loan_id')
-    equipment_id = None
-    item_name = None
-    if loan_id:
+    loans = []
+    due_date = None
+    if loan_ids_csv:
+        loan_ids = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
+        if loan_ids:
+            conn = connect_db()
+            cursor = conn.cursor()
+            placeholders = ",".join("?" for _ in loan_ids)
+            cursor.execute(
+                f"SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date FROM loans "
+                f"LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
+                f"WHERE loans.id IN ({placeholders})",
+                loan_ids,
+            )
+            loans = cursor.fetchall()
+            conn.close()
+            if loans:
+                due_date = loans[0]['due_date']
+    elif loan_id:
         conn = connect_db()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT loans.equipment_id, equipment.item_name FROM loans "
+            "SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date FROM loans "
             "LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
             "WHERE loans.id = ?",
             (loan_id,)
@@ -973,53 +932,135 @@ def customer_agreement(customer_id):
         loan_row = cursor.fetchone()
         conn.close()
         if loan_row:
-            equipment_id = loan_row['equipment_id']
-            item_name = loan_row['item_name']
-    
-    if request.method == 'POST':
-        waiver_agreed = 'waiver_agreed' in request.form
-        signature_agreed = 'signature_agreed' in request.form
-        signature_data = request.form.get('signature_data', '')
-        loan_id = request.form.get('loan_id') or loan_id
-        
-        if not waiver_agreed or not signature_agreed:
-            flash('You must agree to both the waiver and digital signature acknowledgement.')
-            return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
-        
-        if not signature_data:
-            flash('Please provide a digital signature.')
-            return redirect(url_for('customer_agreement', customer_id=customer_id, loan_id=loan_id))
-        
-        conn = connect_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO customer_agreements (customer_id, loan_id, waiver_agreed, digital_signature_agreed, signature_data, agreed_date) VALUES (?, ?, ?, ?, ?, ?)",
-            (customer_id, loan_id, 1 if waiver_agreed else 0, 1 if signature_agreed else 0, signature_data, datetime.today().date().isoformat()),
-        )
-        conn.commit()
-        conn.close()
-        flash('Customer agreement recorded successfully.')
-        return redirect(url_for('customers'))
-    
-    due_date = None
-    if loan_id:
-        conn = connect_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT due_date FROM loans WHERE id = ?", (loan_id,))
-        loan_row = cursor.fetchone()
-        conn.close()
-        if loan_row:
+            loans = [loan_row]
             due_date = loan_row['due_date']
+
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT equipment.equipment_id, equipment.item_name FROM equipment "
+        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
+        "WHERE loans.id IS NULL ORDER BY equipment.equipment_id"
+    )
+    available_equipment = cursor.fetchall()
+    conn.close()
+
+    if request.method == 'POST':
+        action = request.form.get('action', 'save')
+        loan_ids_csv = request.form.get('loan_ids') or loan_ids_csv
+        loan_id = request.form.get('loan_id') or loan_id
+
+        if action == 'add_equipment':
+            selected_equipment = request.form.getlist('equipment_ids')
+            if not selected_equipment:
+                flash('Please select at least one equipment item to add.')
+                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+
+            conn = connect_db()
+            cursor = conn.cursor()
+            for equipment_id in selected_equipment:
+                equipment_id = equipment_id.strip().upper()
+                if not equipment_id:
+                    continue
+                cursor.execute(
+                    "SELECT equipment_id, item_name FROM equipment WHERE equipment_id = ?",
+                    (equipment_id,),
+                )
+                equipment_row = cursor.fetchone()
+                if not equipment_row:
+                    continue
+                cursor.execute(
+                    "SELECT id FROM loans WHERE equipment_id = ? AND returned_date IS NULL",
+                    (equipment_id,),
+                )
+                if cursor.fetchone():
+                    continue
+                checked_out_date = datetime.today().date()
+                due_date_value = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+                cursor.execute(
+                    "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date) VALUES (?, ?, ?, ?, ?, ?)",
+                    (customer_id, equipment_id, checked_out_date.isoformat(), due_date_value.isoformat(), None, None),
+                )
+                new_loan_id = cursor.lastrowid
+                if loan_ids_csv:
+                    loan_ids_csv += f",{new_loan_id}"
+                else:
+                    loan_ids_csv = str(new_loan_id)
+            conn.commit()
+            conn.close()
+            return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv))
+
+        if action == 'save':
+            waiver_agreed = 'waiver_agreed' in request.form
+            signature_agreed = 'signature_agreed' in request.form
+            signature_data = request.form.get('signature_data', '')
+
+            if not waiver_agreed or not signature_agreed:
+                flash('You must agree to both the waiver and digital signature acknowledgement.')
+                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+
+            if not signature_data:
+                flash('Please provide a digital signature.')
+                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+
+            conn = connect_db()
+            cursor = conn.cursor()
+            updated_loans = []
+            if loan_ids_csv:
+                loan_ids = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
+                for lid in loan_ids:
+                    cursor.execute(
+                        "UPDATE loans SET agreement_data = ?, agreement_date = ? WHERE id = ?",
+                        (signature_data, datetime.today().date().isoformat(), lid),
+                    )
+                    updated_loans.append(lid)
+            elif loan_id:
+                cursor.execute(
+                    "UPDATE loans SET agreement_data = ?, agreement_date = ? WHERE id = ?",
+                    (signature_data, datetime.today().date().isoformat(), loan_id),
+                )
+                updated_loans.append(int(loan_id))
+
+            if updated_loans:
+                cursor.execute(
+                    "INSERT INTO customer_agreements (customer_id, loan_id, waiver_agreed, digital_signature_agreed, signature_data, agreed_date) VALUES (?, ?, ?, ?, ?, ?)",
+                    (customer_id, updated_loans[0], 1 if waiver_agreed else 0, 1 if signature_agreed else 0, signature_data, datetime.today().date().isoformat()),
+                )
+            conn.commit()
+            conn.close()
+            flash('Customer agreement recorded successfully.')
+            return redirect(url_for('master_control'))
 
     return render_template(
         'customer_agreement.html',
         customer=customer,
         loan_id=loan_id,
+        loan_ids=loan_ids_csv,
         due_date=due_date,
         checkout_period_days=CHECKOUT_PERIOD_DAYS,
-        equipment_id=equipment_id,
-        item_name=item_name,
+        loans=loans,
+        available_equipment=available_equipment,
     )
+
+@app.route('/agreement_view/<int:loan_id>')
+def agreement_view(loan_id):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT loans.id, loans.equipment_id, loans.agreement_data, loans.agreement_date, loans.due_date, "
+        "customers.name as customer_name, customers.phone, customers.zip_code, equipment.item_name "
+        "FROM loans "
+        "JOIN customers ON loans.customer_id = customers.id "
+        "LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
+        "WHERE loans.id = ? AND loans.returned_date IS NULL",
+        (loan_id,),
+    )
+    agreement = cursor.fetchone()
+    conn.close()
+    if not agreement or not agreement['agreement_data']:
+        flash('Agreement not found or no saved signature available.')
+        return redirect(url_for('return_equipment'))
+    return render_template('agreement_view.html', agreement=agreement)
 
 if __name__ == '__main__':
     init_db()

@@ -1,23 +1,11 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  #sigCanvas {
-    border: 2px dashed #007bff;
-    border-radius: 8px;
-    background: #fff;
-  }
   @media print {
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: white;
-      color: black;
-    }
     body * { visibility: hidden !important; }
     #agreement-card, #agreement-card * { visibility: visible !important; }
-    #agreement-card { position: absolute; left: 0; top: 0; width: 100%; padding: 15px; }
+    #agreement-card { position: absolute; left: 0; top: 0; width: 100%; }
     .no-print { display: none !important; }
-    #agreement-card { page-break-after: avoid; }
   }
 </style>
 
@@ -61,7 +49,7 @@
     </div>
 
     <script>
-      window.EQUIPMENT_SEARCH_API_KEY = {{ search_api_key | tojson }};
+      window.EQUIPMENT_SEARCH_API_KEY = '{{ search_api_key | e("js") }}';
     (function(){
       const input = document.getElementById('equipmentSearch');
       const resultsDiv = document.getElementById('searchResults');

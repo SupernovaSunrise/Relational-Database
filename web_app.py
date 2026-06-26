@@ -13,8 +13,9 @@ except Exception:
     Font = PatternFill = Alignment = None
     HAVE_OPENPYXL = False
 
-from io import BytesIO
+from io import BytesIO, StringIO
 import os
+import csv
 try:
     import pandas as pd
     HAVE_PANDAS = True
@@ -24,10 +25,14 @@ except Exception:
 import base64
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # Change this in production
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-here')  # Change this in production
 
 DB_PATH = Path(__file__).parent / "database.db"
 CHECKOUT_PERIOD_DAYS = 120
+SEARCH_RATE_LIMIT = 20
+SEARCH_RATE_PERIOD = 10
+search_request_log = {}
+SEARCH_API_KEY = os.environ.get('EQUIPMENT_SEARCH_API_KEY')
 
 EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z]{2}-\d{4}$")
 
@@ -349,8 +354,8 @@ def master_control():
     conn = connect_db()
     cursor = conn.cursor()
     query = (
-        "SELECT equipment.equipment_id, equipment.item_name, customers.name AS customer_name, "
-        "customers.zip_code AS customer_zip, loans.id AS loan_id, loans.checked_out_date, loans.due_date "
+        "SELECT equipment.equipment_id, equipment.item_name, customers.id AS customer_id, customers.name AS customer_name, "
+        "customers.zip_code AS customer_zip, loans.id AS loan_id, loans.checked_out_date, loans.due_date, loans.agreement_data "
         "FROM equipment "
         "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
         "LEFT JOIN customers ON loans.customer_id = customers.id "
@@ -608,7 +613,7 @@ def return_equipment():
     conn = connect_db()
     cursor = conn.cursor()
     query = (
-        "SELECT loans.id, loans.equipment_id, equipment.item_name, customers.name, "
+        "SELECT loans.id, loans.equipment_id, equipment.item_name, customers.id AS customer_id, customers.name, "
         "customers.zip_code, loans.checked_out_date, loans.due_date, loans.agreement_data "
         "FROM loans "
         "JOIN equipment ON loans.equipment_id = equipment.equipment_id "
@@ -636,6 +641,59 @@ def return_equipment():
         sort_dir=sort_dir,
     )
 
+@app.route('/inline_update', methods=['POST'])
+def inline_update():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Invalid request payload.'}), 400
+
+    table = data.get('table')
+    row_id = data.get('row_id')
+    field = data.get('field')
+    value = data.get('value', '').strip()
+
+    if not table or not row_id or not field:
+        return jsonify({'error': 'Missing update parameters.'}), 400
+
+    allowed_tables = {
+        'customers': {'key': 'id', 'fields': ['name', 'phone', 'zip_code']},
+        'equipment': {'key': 'equipment_id', 'fields': ['item_name']},
+        'loans': {'key': 'id', 'fields': ['checked_out_date', 'due_date']},
+        'checkout_log': {'key': 'id', 'fields': ['checkout_date', 'equipment_id', 'item_name', 'customer_zip_code']},
+        'deleted_items_log': {'key': 'id', 'fields': ['deletion_date', 'equipment_id', 'item_name']},
+    }
+
+    if table not in allowed_tables or field not in allowed_tables[table]['fields']:
+        return jsonify({'error': 'Invalid update target.'}), 400
+
+    if field in ('checked_out_date', 'due_date', 'checkout_date', 'deletion_date'):
+        try:
+            datetime.fromisoformat(value)
+        except Exception:
+            return jsonify({'error': 'Date must be in YYYY-MM-DD format.'}), 400
+
+    if table == 'customers' and field == 'phone':
+        digits = re.sub(r"\D", "", value)
+        if len(digits) < 10:
+            return jsonify({'error': 'Phone must contain at least 10 digits.'}), 400
+    if table == 'customers' and field == 'zip_code':
+        if not re.fullmatch(r"\d{5}", value):
+            return jsonify({'error': 'Zip code must be 5 digits.'}), 400
+
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            f"UPDATE {table} SET {field} = ? WHERE {allowed_tables[table]['key']} = ?",
+            (value, row_id),
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 400
+    conn.close()
+    return jsonify({'success': True})
+
 @app.route('/checked_out')
 def checked_out():
     return redirect(url_for('return_equipment'))
@@ -653,16 +711,49 @@ def settings():
             if file.filename == '':
                 flash('No selected file')
                 return redirect(url_for('settings'))
-            if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+            if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls') or file.filename.endswith('.csv')):
                 try:
                     conn = connect_db()
                     cursor = conn.cursor()
                     count = 0
-                    if file.filename.endswith('.xls'):
+                    if file.filename.endswith('.csv'):
+                        # CSV import using built-in csv module
+                        file.seek(0)
+                        stream = file.stream.read().decode('utf-8')
+                        csv_file = stream.splitlines()
+                        reader = csv.reader(csv_file)
+                        for row_idx, row in enumerate(reader):
+                            if len(row) < 3:
+                                continue
+                            if row_idx == 0:
+                                header = [cell.strip().lower() for cell in row if isinstance(cell, str)]
+                                if any(h in header for h in ('name', 'phone', 'zip', 'zipcode', 'zip code')):
+                                    continue
+                            try:
+                                name = row[0].strip()
+                                phone = row[1].strip()
+                                zip_code = row[2].strip()
+                            except Exception:
+                                continue
+                            if name and phone and zip_code:
+                                digits = re.sub(r"\D", "", str(phone))
+                                if len(digits) >= 10 and re.fullmatch(r"\d{5}", str(zip_code)):
+                                    cursor.execute(
+                                        "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
+                                        (name, f"%{digits}%"),
+                                    )
+                                    if not cursor.fetchone():
+                                        cursor.execute(
+                                            "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
+                                            (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
+                                        )
+                                        count += 1
+                    elif file.filename.endswith('.xls'):
                         # use pandas for old .xls files
-                        if not HAVE_PANDAS:
-                            flash('Pandas is not available on the server; cannot import .xls files. Install pandas.')
+                        if not HAVE_PANDAS or pd is None:
+                            flash('Pandas is not available on the server; cannot import .xls files. Try CSV format instead.')
                         else:
+                            file.seek(0)
                             df = pd.read_excel(file)
                             for _, row in df.iterrows():
                                 try:
@@ -684,31 +775,35 @@ def settings():
                                                 (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
                                             )
                                             count += 1
-                    else:
-                        wb = load_workbook(file)
-                        ws = wb.active
-                        for row in ws.iter_rows(min_row=2, values_only=True):
-                            if row[0] and row[1] and row[2]:
-                                name, phone, zip_code = row[0], row[1], row[2]
-                                digits = re.sub(r"\D", "", str(phone))
-                                if len(digits) >= 10 and re.fullmatch(r"\d{5}", str(zip_code)):
-                                    cursor.execute(
-                                        "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
-                                        (name, f"%{digits}%"),
-                                    )
-                                    if not cursor.fetchone():
+                    else:  # .xlsx
+                        if not HAVE_OPENPYXL or load_workbook is None:
+                            flash('OpenPyXL is not available on the server; cannot import .xlsx files. Try CSV or .xls format instead.')
+                        else:
+                            file.seek(0)
+                            wb = load_workbook(file)
+                            ws = wb.active
+                            for row in ws.iter_rows(min_row=2, values_only=True):
+                                if row[0] and row[1] and row[2]:
+                                    name, phone, zip_code = row[0], row[1], row[2]
+                                    digits = re.sub(r"\D", "", str(phone))
+                                    if len(digits) >= 10 and re.fullmatch(r"\d{5}", str(zip_code)):
                                         cursor.execute(
-                                            "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
-                                            (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
+                                            "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
+                                            (name, f"%{digits}%"),
                                         )
-                                        count += 1
+                                        if not cursor.fetchone():
+                                            cursor.execute(
+                                                "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
+                                                (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
+                                            )
+                                            count += 1
                     conn.commit()
                     conn.close()
                     flash(f'Imported {count} new customers successfully.')
                 except Exception as e:
                     flash(f'Error importing file: {str(e)}')
             else:
-                flash('File must be .xlsx or .xls format')
+                flash('File must be .xlsx, .xls, or .csv format')
             return redirect(url_for('settings'))
         
         elif action == 'import_equipment':
@@ -719,25 +814,55 @@ def settings():
             if file.filename == '':
                 flash('No selected file')
                 return redirect(url_for('settings'))
-            if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+            if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls') or file.filename.endswith('.csv')):
                 try:
                     conn = connect_db()
                     cursor = conn.cursor()
                     count = 0
-                    if file.filename.endswith('.xls'):
-                        if not HAVE_PANDAS:
-                            flash('Pandas is not available on the server; cannot import .xls files. Install pandas.')
+                    if file.filename.endswith('.csv'):
+                        # CSV import using built-in csv module
+                        file.seek(0)
+                        stream = file.stream.read().decode('utf-8')
+                        csv_file = stream.splitlines()
+                        reader = csv.reader(csv_file)
+                        for row_idx, row in enumerate(reader):
+                            if len(row) < 2:
+                                continue
+                            if row_idx == 0:
+                                header = [cell.strip().lower() for cell in row if isinstance(cell, str)]
+                                if any(h in header for h in ('equipmentid', 'itemname', 'item name')):
+                                    continue
+                            try:
+                                equipment_id = str(row[0]).upper().strip()
+                                item_name = str(row[1]).strip()
+                            except Exception:
+                                continue
+                            if equipment_id and item_name and EQUIPMENT_ID_PATTERN.fullmatch(equipment_id):
+                                cursor.execute(
+                                    "SELECT equipment_id FROM equipment WHERE equipment_id = ?",
+                                    (equipment_id,),
+                                )
+                                if not cursor.fetchone():
+                                    cursor.execute(
+                                        "INSERT INTO equipment (equipment_id, item_name) VALUES (?, ?)",
+                                        (equipment_id, item_name),
+                                    )
+                                    count += 1
+                    elif file.filename.endswith('.xls'):
+                        if not HAVE_PANDAS or pd is None:
+                            flash('Pandas is not available on the server; cannot import .xls files. Try CSV format instead.')
                         else:
+                            file.seek(0)
                             df = pd.read_excel(file)
                             for _, row in df.iterrows():
                                 try:
-                                    equipment_id = str(row.iloc[0]).upper()
-                                    item_name = str(row.iloc[1])
+                                    equipment_id = str(row.iloc[0]).upper().strip()
+                                    item_name = str(row.iloc[1]).strip()
                                 except Exception:
                                     continue
                                 if equipment_id and item_name and EQUIPMENT_ID_PATTERN.fullmatch(equipment_id):
                                     cursor.execute(
-                                        "SELECT id FROM equipment WHERE equipment_id = ?",
+                                        "SELECT equipment_id FROM equipment WHERE equipment_id = ?",
                                         (equipment_id,),
                                     )
                                     if not cursor.fetchone():
@@ -746,30 +871,34 @@ def settings():
                                             (equipment_id, item_name),
                                         )
                                         count += 1
-                    else:
-                        wb = load_workbook(file)
-                        ws = wb.active
-                        for row in ws.iter_rows(min_row=2, values_only=True):
-                            if row[0] and row[1]:
-                                equipment_id, item_name = str(row[0]).upper(), str(row[1])
-                                if EQUIPMENT_ID_PATTERN.fullmatch(equipment_id):
-                                    cursor.execute(
-                                        "SELECT id FROM equipment WHERE equipment_id = ?",
-                                        (equipment_id,),
-                                    )
-                                    if not cursor.fetchone():
+                    else:  # .xlsx
+                        if not HAVE_OPENPYXL or load_workbook is None:
+                            flash('OpenPyXL is not available on the server; cannot import .xlsx files. Try CSV or .xls format instead.')
+                        else:
+                            file.seek(0)
+                            wb = load_workbook(file)
+                            ws = wb.active
+                            for row in ws.iter_rows(min_row=2, values_only=True):
+                                if row[0] and row[1]:
+                                    equipment_id, item_name = str(row[0]).upper().strip(), str(row[1]).strip()
+                                    if EQUIPMENT_ID_PATTERN.fullmatch(equipment_id):
                                         cursor.execute(
-                                            "INSERT INTO equipment (equipment_id, item_name) VALUES (?, ?)",
-                                            (equipment_id, item_name),
+                                            "SELECT equipment_id FROM equipment WHERE equipment_id = ?",
+                                            (equipment_id,),
                                         )
-                                        count += 1
+                                        if not cursor.fetchone():
+                                            cursor.execute(
+                                                "INSERT INTO equipment (equipment_id, item_name) VALUES (?, ?)",
+                                                (equipment_id, item_name),
+                                            )
+                                            count += 1
                     conn.commit()
                     conn.close()
                     flash(f'Imported {count} new equipment items successfully.')
                 except Exception as e:
                     flash(f'Error importing file: {str(e)}')
             else:
-                flash('File must be .xlsx or .xls format')
+                flash('File must be .xlsx, .xls, or .csv format')
             return redirect(url_for('settings'))
         
         elif action == 'export':
@@ -800,14 +929,15 @@ def settings():
                     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='customers_export.xlsx')
                 else:
                     # Fallback CSV
-                    import csv
-                    output = BytesIO()
+                    output = StringIO()
                     writer = csv.writer(output)
                     writer.writerow(['ID', 'Name', 'Phone', 'ZipCode', 'DateAdded'])
                     for row in rows:
                         writer.writerow([row['id'], row['name'], row['phone'], row['zip_code'], row['date_added']])
-                    output.seek(0)
-                    return send_file(output, mimetype='text/csv', as_attachment=True, download_name='customers_export.csv')
+                    csv_bytes = output.getvalue().encode('utf-8')
+                    output_bytes = BytesIO(csv_bytes)
+                    output_bytes.seek(0)
+                    return send_file(output_bytes, mimetype='text/csv', as_attachment=True, download_name='customers_export.csv')
             
             elif export_type == 'equipment':
                 cursor.execute("SELECT equipment_id, item_name FROM equipment ORDER BY equipment_id")
@@ -830,27 +960,49 @@ def settings():
                     output.seek(0)
                     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='equipment_export.xlsx')
                 else:
-                    import csv
-                    output = BytesIO()
+                    output = StringIO()
                     writer = csv.writer(output)
                     writer.writerow(['EquipmentID', 'ItemName'])
                     for row in rows:
                         writer.writerow([row['equipment_id'], row['item_name']])
-                    output.seek(0)
-                    return send_file(output, mimetype='text/csv', as_attachment=True, download_name='equipment_export.csv')
+                    csv_bytes = output.getvalue().encode('utf-8')
+                    output_bytes = BytesIO(csv_bytes)
+                    output_bytes.seek(0)
+                    return send_file(output_bytes, mimetype='text/csv', as_attachment=True, download_name='equipment_export.csv')
     
     return render_template('settings.html')
 
-@app.route('/reports', methods=['GET'])
+@app.route('/reports', methods=['GET', 'POST'])
 def reports():
     report_type = request.args.get('report_type', 'checkout')
     year_filter = request.args.get('year_filter', '')
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        report_type = request.form.get('report_type', report_type)
+        year_filter = request.form.get('year_filter', year_filter)
+        conn = connect_db()
+        cursor = conn.cursor()
+        if action == 'delete_checkout':
+            checkout_id = request.form.get('checkout_id')
+            if checkout_id and checkout_id.isdigit():
+                cursor.execute("DELETE FROM checkout_log WHERE id = ?", (int(checkout_id),))
+                conn.commit()
+                flash('Checkout log entry removed successfully.')
+        elif action == 'delete_item_sale':
+            item_sale_id = request.form.get('item_sale_id')
+            if item_sale_id and item_sale_id.isdigit():
+                cursor.execute("DELETE FROM deleted_items_log WHERE id = ?", (int(item_sale_id),))
+                conn.commit()
+                flash('Item sale log entry removed successfully.')
+        conn.close()
+        return redirect(url_for('reports', report_type=report_type, year_filter=year_filter))
     
     conn = connect_db()
     cursor = conn.cursor()
     
     if report_type == 'checkout':
-        query = "SELECT customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log WHERE 1=1"
+        query = "SELECT id, customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log WHERE 1=1"
         params = ()
         if year_filter:
             query += " AND strftime('%Y', checkout_date) = ?"
@@ -860,7 +1012,7 @@ def reports():
         report_data = cursor.fetchall()
         report_title = "Checkout Log"
     else:  # item_sales
-        query = "SELECT equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1"
+        query = "SELECT id, equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1"
         params = ()
         if year_filter:
             query += " AND strftime('%Y', deletion_date) = ?"
@@ -939,6 +1091,31 @@ def customer_agreement(customer_id):
         action = request.form.get('action', 'save')
         loan_ids_csv = request.form.get('loan_ids') or loan_ids_csv
         loan_id = request.form.get('loan_id') or loan_id
+
+        if action == 'cancel':
+            loans_to_cancel = []
+            if loan_ids_csv:
+                loans_to_cancel = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
+            elif loan_id:
+                loans_to_cancel = [int(loan_id)]
+            if loans_to_cancel:
+                conn = connect_db()
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT equipment_id, checked_out_date FROM loans WHERE id IN ({','.join('?' for _ in loans_to_cancel)})",
+                    loans_to_cancel,
+                )
+                cancelled_info = cursor.fetchall()
+                for row in cancelled_info:
+                    cursor.execute(
+                        "DELETE FROM checkout_log WHERE equipment_id = ? AND checkout_date = ?",
+                        (row['equipment_id'], row['checked_out_date']),
+                    )
+                cursor.execute(f"DELETE FROM loans WHERE id IN ({','.join('?' for _ in loans_to_cancel)})", loans_to_cancel)
+                conn.commit()
+                conn.close()
+            flash('Checkout cancelled and pending items removed.')
+            return redirect(url_for('master_control'))
 
         if action == 'add_equipment':
             selected_equipment = request.form.getlist('equipment_ids')
@@ -1029,6 +1206,7 @@ def customer_agreement(customer_id):
         due_date=due_date,
         checkout_period_days=CHECKOUT_PERIOD_DAYS,
         loans=loans,
+        search_api_key=SEARCH_API_KEY or '',
     )
 
 
@@ -1039,6 +1217,20 @@ def equipment_search():
         limit = int(request.args.get('limit', 20))
     except Exception:
         limit = 20
+
+    if SEARCH_API_KEY:
+        provided_key = request.headers.get('X-API-KEY', '')
+        if provided_key != SEARCH_API_KEY:
+            return jsonify({'error': 'Unauthorized'}), 401
+
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr) or 'unknown'
+    now = datetime.now().timestamp()
+    timestamps = [t for t in search_request_log.get(client_ip, []) if now - t < SEARCH_RATE_PERIOD]
+    if len(timestamps) >= SEARCH_RATE_LIMIT:
+        return jsonify({'error': 'Too many requests'}), 429
+    timestamps.append(now)
+    search_request_log[client_ip] = timestamps
+
     conn = connect_db()
     cursor = conn.cursor()
     params = []

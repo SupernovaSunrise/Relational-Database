@@ -32,9 +32,9 @@
         {% for customer in customers %}
         <tr>
             <td>{{ customer.id }}</td>
-            <td>{{ customer.name }}</td>
-            <td>{{ customer.phone }}</td>
-            <td>{{ customer.zip_code }}</td>
+            <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="name">{{ customer.name }}</td>
+            <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="phone">{{ customer.phone }}</td>
+            <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="zip_code">{{ customer.zip_code }}</td>
             <td>{{ customer.date_added }}</td>
             <td>
                 <form method="POST" action="{{ url_for('delete_customer', customer_id=customer.id) }}" style="display:inline; margin:0;">

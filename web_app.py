@@ -24,10 +24,14 @@ except Exception:
 import base64
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # Change this in production
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-here')  # Change this in production
 
 DB_PATH = Path(__file__).parent / "database.db"
 CHECKOUT_PERIOD_DAYS = 120
+SEARCH_RATE_LIMIT = 20
+SEARCH_RATE_PERIOD = 10
+search_request_log = {}
+SEARCH_API_KEY = os.environ.get('EQUIPMENT_SEARCH_API_KEY')
 
 EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z]{2}-\d{4}$")
 
@@ -841,16 +845,37 @@ def settings():
     
     return render_template('settings.html')
 
-@app.route('/reports', methods=['GET'])
+@app.route('/reports', methods=['GET', 'POST'])
 def reports():
     report_type = request.args.get('report_type', 'checkout')
     year_filter = request.args.get('year_filter', '')
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        report_type = request.form.get('report_type', report_type)
+        year_filter = request.form.get('year_filter', year_filter)
+        conn = connect_db()
+        cursor = conn.cursor()
+        if action == 'delete_checkout':
+            checkout_id = request.form.get('checkout_id')
+            if checkout_id and checkout_id.isdigit():
+                cursor.execute("DELETE FROM checkout_log WHERE id = ?", (int(checkout_id),))
+                conn.commit()
+                flash('Checkout log entry removed successfully.')
+        elif action == 'delete_item_sale':
+            item_sale_id = request.form.get('item_sale_id')
+            if item_sale_id and item_sale_id.isdigit():
+                cursor.execute("DELETE FROM deleted_items_log WHERE id = ?", (int(item_sale_id),))
+                conn.commit()
+                flash('Item sale log entry removed successfully.')
+        conn.close()
+        return redirect(url_for('reports', report_type=report_type, year_filter=year_filter))
     
     conn = connect_db()
     cursor = conn.cursor()
     
     if report_type == 'checkout':
-        query = "SELECT customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log WHERE 1=1"
+        query = "SELECT id, customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log WHERE 1=1"
         params = ()
         if year_filter:
             query += " AND strftime('%Y', checkout_date) = ?"
@@ -860,7 +885,7 @@ def reports():
         report_data = cursor.fetchall()
         report_title = "Checkout Log"
     else:  # item_sales
-        query = "SELECT equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1"
+        query = "SELECT id, equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1"
         params = ()
         if year_filter:
             query += " AND strftime('%Y', deletion_date) = ?"
@@ -939,6 +964,31 @@ def customer_agreement(customer_id):
         action = request.form.get('action', 'save')
         loan_ids_csv = request.form.get('loan_ids') or loan_ids_csv
         loan_id = request.form.get('loan_id') or loan_id
+
+        if action == 'cancel':
+            loans_to_cancel = []
+            if loan_ids_csv:
+                loans_to_cancel = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
+            elif loan_id:
+                loans_to_cancel = [int(loan_id)]
+            if loans_to_cancel:
+                conn = connect_db()
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT equipment_id, checked_out_date FROM loans WHERE id IN ({','.join('?' for _ in loans_to_cancel)})",
+                    loans_to_cancel,
+                )
+                cancelled_info = cursor.fetchall()
+                for row in cancelled_info:
+                    cursor.execute(
+                        "DELETE FROM checkout_log WHERE equipment_id = ? AND checkout_date = ?",
+                        (row['equipment_id'], row['checked_out_date']),
+                    )
+                cursor.execute(f"DELETE FROM loans WHERE id IN ({','.join('?' for _ in loans_to_cancel)})", loans_to_cancel)
+                conn.commit()
+                conn.close()
+            flash('Checkout cancelled and pending items removed.')
+            return redirect(url_for('master_control'))
 
         if action == 'add_equipment':
             selected_equipment = request.form.getlist('equipment_ids')
@@ -1029,6 +1079,7 @@ def customer_agreement(customer_id):
         due_date=due_date,
         checkout_period_days=CHECKOUT_PERIOD_DAYS,
         loans=loans,
+        search_api_key=SEARCH_API_KEY or '',
     )
 
 
@@ -1039,6 +1090,20 @@ def equipment_search():
         limit = int(request.args.get('limit', 20))
     except Exception:
         limit = 20
+
+    if SEARCH_API_KEY:
+        provided_key = request.headers.get('X-API-KEY', '')
+        if provided_key != SEARCH_API_KEY:
+            return jsonify({'error': 'Unauthorized'}), 401
+
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr) or 'unknown'
+    now = datetime.now().timestamp()
+    timestamps = [t for t in search_request_log.get(client_ip, []) if now - t < SEARCH_RATE_PERIOD]
+    if len(timestamps) >= SEARCH_RATE_LIMIT:
+        return jsonify({'error': 'Too many requests'}), 429
+    timestamps.append(now)
+    search_request_log[client_ip] = timestamps
+
     conn = connect_db()
     cursor = conn.cursor()
     params = []

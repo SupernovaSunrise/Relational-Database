@@ -83,10 +83,12 @@
                 <th>Equipment ID</th>
                 <th>Item Name</th>
                 <th>Customer ZIP Code</th>
+                <th>Actions</th>
             {% else %}
                 <th>Deletion Date</th>
                 <th>Equipment ID</th>
                 <th>Item Name</th>
+                <th>Actions</th>
             {% endif %}
         </tr>
     </thead>
@@ -98,10 +100,28 @@
                 <td>{{ item.equipment_id }}</td>
                 <td>{{ item.item_name }}</td>
                 <td>{{ item.customer_zip_code }}</td>
+                <td>
+                    <form method="post" style="display:inline;">
+                        <input type="hidden" name="action" value="delete_checkout">
+                        <input type="hidden" name="checkout_id" value="{{ item.id }}">
+                        <input type="hidden" name="report_type" value="{{ report_type }}">
+                        <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                        <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
+                    </form>
+                </td>
             {% else %}
                 <td>{{ item.deletion_date }}</td>
                 <td>{{ item.equipment_id }}</td>
                 <td>{{ item.item_name }}</td>
+                <td>
+                    <form method="post" style="display:inline;">
+                        <input type="hidden" name="action" value="delete_item_sale">
+                        <input type="hidden" name="item_sale_id" value="{{ item.id }}">
+                        <input type="hidden" name="report_type" value="{{ report_type }}">
+                        <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                        <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
+                    </form>
+                </td>
             {% endif %}
         </tr>
         {% endfor %}

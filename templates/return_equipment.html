@@ -57,7 +57,7 @@
             <td>{{ item.zip_code }}</td>
             <td>
                 {% if item.agreement_data %}
-                    <a class="btn" href="{{ url_for('agreement_view', loan_id=item.id) }}" target="_blank">View Agreement</a>
+                    <a class="btn" href="{{ url_for('agreement_view', loan_id=item.id) }}">View Agreement</a>
                 {% else %}
                     <span style="color: #666;">None</span>
                 {% endif %}

@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Veteran's Pantry DME{% endblock %}
+{% block title %}Veteran's DME{% endblock %}
 
 {% block content %}
-<h1>Veteran's Pantry DME</h1>
+<h1>Veteran's DME</h1>
 <p>Manage customers, equipment, checkouts, and returns from one central page.</p>
 
 <form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
@@ -107,13 +107,16 @@
         {% for item in rows %}
         <tr>
             <td>{{ item.equipment_id }}</td>
-            <td>{{ item.item_name }}</td>
-            <td>{{ item.customer_name or '' }}</td>
-            <td>{{ item.customer_zip or '' }}</td>
-            <td>{{ item.checked_out_date or '' }}</td>
-            <td>{{ item.due_date or '' }}</td>
+            <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="item_name">{{ item.item_name }}</td>
+            <td {% if item.customer_name %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="name"{% endif %}>{{ item.customer_name or '' }}</td>
+            <td {% if item.customer_zip %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="zip_code"{% endif %}>{{ item.customer_zip or '' }}</td>
+            <td {% if item.loan_id %}contenteditable="true" data-table="loans" data-row-id="{{ item.loan_id }}" data-field="checked_out_date"{% endif %}>{{ item.checked_out_date or '' }}</td>
+            <td {% if item.loan_id %}contenteditable="true" data-table="loans" data-row-id="{{ item.loan_id }}" data-field="due_date"{% endif %}>{{ item.due_date or '' }}</td>
             <td>
                 {% if item.loan_id %}
+                {% if item.agreement_data %}
+                    <a class="btn" href="{{ url_for('agreement_view', loan_id=item.loan_id) }}">View Agreement</a>
+                {% endif %}
                 <form method="POST" style="display:inline; margin:0;">
                     <input type="hidden" name="action" value="return">
                     <input type="hidden" name="loan_id" value="{{ item.loan_id }}">

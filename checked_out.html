@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Checked Out Equipment - Equipment Checkout Database{% endblock %}
+
+{% block content %}
+<h1>Currently Checked Out Equipment</h1>
+
+<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px;">
+        <label for="search">Search checked-out items</label>
+        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment, item, or customer">
+    </div>
+    <button type="submit" class="btn">Search</button>
+    <a href="{{ url_for('checked_out') }}" class="btn" style="background-color: #6c757d;">Clear</a>
+</form>
+
+{% if checked_out %}
+<table>
+    <thead>
+        <tr>
+            <th>Equipment ID</th>
+            <th>Item Name</th>
+            <th>Customer</th>
+            <th>Checked Out Date</th>
+            <th>Due Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in checked_out %}
+        <tr>
+            <td>{{ item.equipment_id }}</td>
+            <td>{{ item.item_name }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.checked_out_date }}</td>
+            <td>{{ item.due_date }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No equipment is currently checked out.</p>
+{% endif %}
+{% endblock %}

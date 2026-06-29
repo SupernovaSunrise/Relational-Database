@@ -84,6 +84,7 @@ def init_db():
             item_name TEXT NOT NULL,
             equipment_id TEXT NOT NULL,
             checkout_date TEXT NOT NULL,
+            is_first_item INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY(equipment_id) REFERENCES equipment(equipment_id)
         )
         """
@@ -139,7 +140,19 @@ def init_db():
     )
     
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items_log(deletion_date)")
-    conn.commit()
+    
+    cursor.execute("PRAGMA table_info(equipment)")
+    equip_columns = [column[1] for column in cursor.fetchall()]
+    if "date_verified" not in equip_columns:
+        cursor.execute("ALTER TABLE equipment ADD COLUMN date_verified TEXT")
+        conn.commit()
+
+    cursor.execute("PRAGMA table_info(checkout_log)")
+    log_columns = [column[1] for column in cursor.fetchall()]
+    if "is_first_item" not in log_columns:
+        cursor.execute("ALTER TABLE checkout_log ADD COLUMN is_first_item INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    
     conn.close()
 
 def find_customer_matches(customer_reference):
@@ -309,9 +322,10 @@ def master_control():
                     )
                     loan_id = cursor.lastrowid
                     loan_ids.append(str(loan_id))
+                    is_first = 1 if len(loan_ids) == 1 else 0
                     cursor.execute(
-                        "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date) VALUES (?, ?, ?, ?)",
-                        (customer_zip, equipment_row["item_name"], equipment_id, checked_out_date.isoformat()),
+                        "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
+                        (customer_zip, equipment_row["item_name"], equipment_id, checked_out_date.isoformat(), is_first),
                     )
                 conn.commit()
                 conn.close()
@@ -873,9 +887,15 @@ def reports():
     
     conn = connect_db()
     cursor = conn.cursor()
-    
+
+    report_data = []
+    report_title = ''
+    analytics_summary = None
+    daily_guests = []
+    monthly_stats = []
+
     if report_type == 'checkout':
-        query = "SELECT id, customer_zip_code, item_name, equipment_id, checkout_date FROM checkout_log WHERE 1=1"
+        query = "SELECT id, customer_zip_code, item_name, equipment_id, checkout_date, is_first_item FROM checkout_log WHERE 1=1"
         params = ()
         if year_filter:
             query += " AND strftime('%Y', checkout_date) = ?"
@@ -884,7 +904,8 @@ def reports():
         cursor.execute(query, params)
         report_data = cursor.fetchall()
         report_title = "Checkout Log"
-    else:  # item_sales
+
+    elif report_type == 'item_sales':
         query = "SELECT id, equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1"
         params = ()
         if year_filter:
@@ -894,16 +915,68 @@ def reports():
         cursor.execute(query, params)
         report_data = cursor.fetchall()
         report_title = "Item Sales Log"
-    
-    # Get available years
-    if report_type == 'checkout':
-        cursor.execute("SELECT DISTINCT strftime('%Y', checkout_date) as year FROM checkout_log ORDER BY year DESC")
-    else:
-        cursor.execute("SELECT DISTINCT strftime('%Y', deletion_date) as year FROM deleted_items_log ORDER BY year DESC")
-    
+
+    elif report_type == 'analytics':
+        report_title = "Analytics"
+        year_clause = "AND strftime('%Y', checkout_date) = ?" if year_filter else ""
+        params = (year_filter,) if year_filter else ()
+
+        # Guests per day: count distinct guests (is_first_item=1) and total items per day
+        cursor.execute(
+            f"""SELECT checkout_date,
+                       SUM(is_first_item) AS guest_count,
+                       COUNT(*) AS item_count
+               FROM checkout_log
+               WHERE 1=1 {year_clause}
+               GROUP BY checkout_date
+               ORDER BY checkout_date DESC""",
+            params,
+        )
+        daily_guests = cursor.fetchall()
+
+        # Monthly averages
+        cursor.execute(
+            f"""SELECT strftime('%Y-%m', checkout_date) AS month_year,
+                       SUM(is_first_item) AS total_guests,
+                       COUNT(*) AS total_items,
+                       COUNT(DISTINCT checkout_date) AS active_days
+               FROM checkout_log
+               WHERE 1=1 {year_clause}
+               GROUP BY month_year
+               ORDER BY month_year DESC""",
+            params,
+        )
+        raw_monthly = cursor.fetchall()
+        monthly_stats = []
+        for row in raw_monthly:
+            active_days = row['active_days'] or 1
+            monthly_stats.append({
+                'month_year': row['month_year'],
+                'total_guests': row['total_guests'],
+                'total_items': row['total_items'],
+                'avg_guests_per_day': row['total_guests'] / active_days,
+                'avg_items_per_day': row['total_items'] / active_days,
+            })
+
+        # Summary totals
+        cursor.execute(
+            f"SELECT SUM(is_first_item) AS total_guests, COUNT(*) AS total_checkouts, COUNT(DISTINCT checkout_date) AS total_days FROM checkout_log WHERE 1=1 {year_clause}",
+            params,
+        )
+        summary_row = cursor.fetchone()
+        if summary_row and summary_row['total_checkouts']:
+            total_days = summary_row['total_days'] or 1
+            analytics_summary = {
+                'total_checkouts': summary_row['total_checkouts'],
+                'unique_guests': summary_row['total_guests'],
+                'avg_per_day': summary_row['total_guests'] / total_days,
+            }
+
+    # Available years always from checkout_log
+    cursor.execute("SELECT DISTINCT strftime('%Y', checkout_date) as year FROM checkout_log ORDER BY year DESC")
     years = [row['year'] for row in cursor.fetchall() if row['year']]
     conn.close()
-    
+
     return render_template(
         'reports.html',
         report_data=report_data,
@@ -911,6 +984,9 @@ def reports():
         report_title=report_title,
         year_filter=year_filter,
         years=years,
+        analytics_summary=analytics_summary,
+        daily_guests=daily_guests,
+        monthly_stats=monthly_stats,
     )
 
 @app.route('/customer_agreement/<int:customer_id>', methods=['GET', 'POST'])
@@ -998,6 +1074,9 @@ def customer_agreement(customer_id):
 
             conn = connect_db()
             cursor = conn.cursor()
+            cursor.execute("SELECT zip_code FROM customers WHERE id = ?", (customer_id,))
+            cust_row = cursor.fetchone()
+            customer_zip = cust_row['zip_code'] if cust_row else ''
             for equipment_id in selected_equipment:
                 equipment_id = equipment_id.strip().upper()
                 if not equipment_id:
@@ -1022,6 +1101,11 @@ def customer_agreement(customer_id):
                     (customer_id, equipment_id, checked_out_date.isoformat(), due_date_value.isoformat(), None, None),
                 )
                 new_loan_id = cursor.lastrowid
+                # Log every item; is_first_item=0 since initial item already logged
+                cursor.execute(
+                    "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
+                    (customer_zip, equipment_row['item_name'], equipment_id, checked_out_date.isoformat(), 0),
+                )
                 if loan_ids_csv:
                     loan_ids_csv += f",{new_loan_id}"
                 else:
@@ -1143,6 +1227,53 @@ def agreement_view(loan_id):
         flash('Agreement not found or no saved signature available.')
         return redirect(url_for('return_equipment'))
     return render_template('agreement_view.html', agreement=agreement)
+
+@app.route('/inline_update', methods=['POST'])
+def inline_update():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request'}), 400
+    
+    table = data.get('table')
+    row_id = data.get('row_id')
+    field = data.get('field')
+    value = data.get('value')
+    
+    if not all([table, row_id, field, value is not None]):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    allowed_tables = {'loans', 'customers', 'equipment'}
+    if table not in allowed_tables:
+        return jsonify({'error': 'Invalid table'}), 400
+    
+    allowed_fields = {
+        'loans': {'checked_out_date', 'due_date', 'returned_date', 'equipment_id', 'item_name'},
+        'customers': {'name', 'phone', 'zip_code'},
+        'equipment': {'item_name', 'equipment_id', 'date_verified'},
+    }
+    if field not in allowed_fields.get(table, set()):
+        return jsonify({'error': 'Invalid field'}), 400
+    
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        if table == 'loans':
+            cursor.execute(f"UPDATE loans SET {field} = ? WHERE id = ?", (value, int(row_id)))
+        elif table == 'customers':
+            cursor.execute(f"UPDATE customers SET {field} = ? WHERE id = ?", (value, int(row_id)))
+        elif table == 'equipment':
+            if field == 'equipment_id':
+                cursor.execute("UPDATE loans SET equipment_id = ? WHERE equipment_id = ?", (value, row_id))
+                cursor.execute("UPDATE checkout_log SET equipment_id = ? WHERE equipment_id = ?", (value, row_id))
+                cursor.execute("UPDATE deleted_items_log SET equipment_id = ? WHERE equipment_id = ?", (value, row_id))
+                cursor.execute("UPDATE equipment SET equipment_id = ? WHERE equipment_id = ?", (value, row_id))
+            else:
+                cursor.execute(f"UPDATE equipment SET {field} = ? WHERE equipment_id = ?", (value, row_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     init_db()

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Veteran's DME{% endblock %}
+
+{% block content %}
+<h1>Veteran's DME</h1>
+<p>Manage customers, equipment, checkouts, and returns from one central page.</p>
+
+<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px;">
+        <label for="search">Search equipment or customer</label>
+        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item name, customer, or ZIP">
+    </div>
+    <button type="submit" class="btn">Search</button>
+    <a href="{{ url_for('master_control') }}" class="btn" style="background-color: #6c757d;">Clear</a>
+</form>
+
+{% if checkout_candidates %}
+<section style="margin-bottom: 20px; padding: 20px; border: 1px solid #ffc107; border-radius: 8px; background: #fff8e1;">
+    <h2>Confirm Customer Selection</h2>
+    <p>Multiple customers match "<strong>{{ pending_customer_reference }}</strong>". Select the correct customer for the selected equipment:</p>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>ZIP</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for customer in checkout_candidates %}
+            <tr>
+                <td>{{ customer.id }}</td>
+                <td>{{ customer.name }}</td>
+                <td>{{ customer.phone }}</td>
+                <td>{{ customer.zip_code }}</td>
+                <td>
+                    <form method="POST" style="margin:0;">
+                        <input type="hidden" name="action" value="checkout">
+                        {% for equipment_id in pending_equipment_ids %}
+                        <input type="hidden" name="equipment_ids" value="{{ equipment_id }}">
+                        {% endfor %}
+                        <input type="hidden" name="customer_reference" value="{{ customer.id }}">
+                        <button type="submit" class="btn">Select</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+<div style="display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-bottom: 30px;">
+    <section style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+        <h2>Add Customer</h2>
+        <form method="POST">
+            <input type="hidden" name="action" value="add_customer">
+            <div class="form-group">
+                <label for="customer_name">Name</label>
+                <input id="customer_name" name="name" type="text" required>
+            </div>
+            <div class="form-group">
+                <label for="customer_phone">Phone</label>
+                <input id="customer_phone" name="phone" type="text" required>
+            </div>
+            <div class="form-group">
+                <label for="customer_zip">ZIP Code</label>
+                <input id="customer_zip" name="zip_code" type="text" required>
+            </div>
+            <button type="submit" class="btn">Add Customer</button>
+        </form>
+    </section>
+
+    <section style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+        <h2>Add Equipment</h2>
+        <form method="POST">
+            <input type="hidden" name="action" value="add_equipment">
+            <div class="form-group">
+                <label for="master_equipment_id_input">Equipment ID</label>
+                <input id="master_equipment_id_input" name="equipment_id" type="text" placeholder="AA-1234" required>
+            </div>
+            <div class="form-group">
+                <label for="master_item_name">Item Name</label>
+                <input id="master_item_name" name="item_name" type="text" required>
+            </div>
+            <button type="submit" class="btn">Add Equipment</button>
+        </form>
+    </section>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th><a href="{{ url_for('master_control', search=search, sort_by='equipment_id', sort_dir='desc' if sort_by == 'equipment_id' and sort_dir == 'asc' else 'asc') }}">Equipment ID {% if sort_by == 'equipment_id' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th><a href="{{ url_for('master_control', search=search, sort_by='item_name', sort_dir='desc' if sort_by == 'item_name' and sort_dir == 'asc' else 'asc') }}">Equipment Name {% if sort_by == 'item_name' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th><a href="{{ url_for('master_control', search=search, sort_by='customer_name', sort_dir='desc' if sort_by == 'customer_name' and sort_dir == 'asc' else 'asc') }}">Customer Name {% if sort_by == 'customer_name' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th><a href="{{ url_for('master_control', search=search, sort_by='customer_zip', sort_dir='desc' if sort_by == 'customer_zip' and sort_dir == 'asc' else 'asc') }}">Customer ZIP {% if sort_by == 'customer_zip' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th><a href="{{ url_for('master_control', search=search, sort_by='checked_out_date', sort_dir='desc' if sort_by == 'checked_out_date' and sort_dir == 'asc' else 'asc') }}">Date Checked Out {% if sort_by == 'checked_out_date' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th><a href="{{ url_for('master_control', search=search, sort_by='due_date', sort_dir='desc' if sort_by == 'due_date' and sort_dir == 'asc' else 'asc') }}">Return Date {% if sort_by == 'due_date' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in rows %}
+        <tr>
+            <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
+            <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="item_name">{{ item.item_name }}</td>
+            <td {% if item.customer_name %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="name"{% endif %}>{{ item.customer_name or '' }}</td>
+            <td {% if item.customer_zip %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="zip_code"{% endif %}>{{ item.customer_zip or '' }}</td>
+            <td {% if item.loan_id %}contenteditable="true" data-table="loans" data-row-id="{{ item.loan_id }}" data-field="checked_out_date"{% endif %}>{{ item.checked_out_date or '' }}</td>
+            <td {% if item.loan_id %}contenteditable="true" data-table="loans" data-row-id="{{ item.loan_id }}" data-field="due_date"{% endif %}>{{ item.due_date or '' }}</td>
+            <td>
+                {% if item.loan_id %}
+                {% if item.agreement_data %}
+                    <a class="btn" href="{{ url_for('agreement_view', loan_id=item.loan_id) }}">View Agreement</a>
+                {% endif %}
+                <form method="POST" style="display:inline; margin:0;">
+                    <input type="hidden" name="action" value="return">
+                    <input type="hidden" name="loan_id" value="{{ item.loan_id }}">
+                    <button type="submit" class="btn btn-danger">Return</button>
+                </form>
+                {% else %}
+                <form method="POST" style="display:flex; gap:6px; align-items:center; margin:0;">
+                    <input type="hidden" name="action" value="checkout">
+                    <input type="hidden" name="equipment_id" value="{{ item.equipment_id }}">
+                    <input name="customer_reference" type="text" placeholder="Customer ID, Name, or Phone" required style="flex:1; min-width:140px; padding:6px; border:1px solid #ddd; border-radius:4px;">
+                    <button type="submit" class="btn">Checkout</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

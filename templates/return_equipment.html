@@ -49,11 +49,11 @@
     <tbody>
         {% for item in checked_out %}
         <tr>
-            <td>{{ item.equipment_id }}</td>
-            <td>{{ item.item_name }}</td>
+            <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
+            <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="item_name">{{ item.item_name }}</td>
             <td>{{ item.name }}</td>
-            <td>{{ item.checked_out_date }}</td>
-            <td>{{ item.due_date }}</td>
+            <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="checked_out_date">{{ item.checked_out_date }}</td>
+            <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="due_date">{{ item.due_date }}</td>
             <td>{{ item.zip_code }}</td>
             <td>
                 {% if item.agreement_data %}

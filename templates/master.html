@@ -6,15 +6,6 @@
 <h1>Veteran's DME</h1>
 <p>Manage customers, equipment, checkouts, and returns from one central page.</p>
 
-<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
-    <div class="form-group" style="flex: 1; min-width: 220px;">
-        <label for="search">Search equipment or customer</label>
-        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item name, customer, or ZIP">
-    </div>
-    <button type="submit" class="btn">Search</button>
-    <a href="{{ url_for('master_control') }}" class="btn" style="background-color: #6c757d;">Clear</a>
-</form>
-
 {% if checkout_candidates %}
 <section style="margin-bottom: 20px; padding: 20px; border: 1px solid #ffc107; border-radius: 8px; background: #fff8e1;">
     <h2>Confirm Customer Selection</h2>
@@ -64,7 +55,7 @@
             </div>
             <div class="form-group">
                 <label for="customer_phone">Phone</label>
-                <input id="customer_phone" name="phone" type="text" required>
+                <input id="customer_phone" name="phone" type="text">
             </div>
             <div class="form-group">
                 <label for="customer_zip">ZIP Code</label>
@@ -91,6 +82,15 @@
     </section>
 </div>
 
+<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
+        <label for="search">Search equipment or customer</label>
+        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item name, customer, or ZIP">
+    </div>
+    <button type="submit" class="btn">Search</button>
+    <a href="{{ url_for('master_control') }}" class="btn" style="background-color: #6c757d;">Clear</a>
+</form>
+
 <table>
     <thead>
         <tr>
@@ -106,7 +106,7 @@
     <tbody>
         {% for item in rows %}
         <tr>
-            <td>{{ item.equipment_id }}</td>
+            <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="item_name">{{ item.item_name }}</td>
             <td {% if item.customer_name %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="name"{% endif %}>{{ item.customer_name or '' }}</td>
             <td {% if item.customer_zip %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="zip_code"{% endif %}>{{ item.customer_zip or '' }}</td>
@@ -126,7 +126,7 @@
                 <form method="POST" style="display:flex; gap:6px; align-items:center; margin:0;">
                     <input type="hidden" name="action" value="checkout">
                     <input type="hidden" name="equipment_id" value="{{ item.equipment_id }}">
-                    <input name="customer_reference" type="text" placeholder="Customer ID, Name, or Phone" required style="flex:1; min-width:140px; padding:6px; border:1px solid #ddd; border-radius:4px;">
+                    <input name="customer_reference" type="text" placeholder="Customer ID, Name, Phone (optional)" style="flex:1; min-width:140px; padding:6px; border:1px solid #ddd; border-radius:4px;">
                     <button type="submit" class="btn">Checkout</button>
                 </form>
                 {% endif %}

@@ -7,13 +7,48 @@
     #agreement-card { position: absolute; left: 0; top: 0; width: 100%; }
     .no-print { display: none !important; }
   }
+  .customer-info-field {
+    border: none;
+    border-bottom: 1px solid #aaa;
+    background: transparent;
+    font-size: inherit;
+    font-family: inherit;
+    padding: 2px 4px;
+    width: 200px;
+  }
+  .customer-info-field:focus {
+    outline: none;
+    border-bottom: 2px solid #007bff;
+    background: #f0f7ff;
+  }
 </style>
 
 <h2>Customer Agreement</h2>
 <div class="card" id="agreement-card">
   <div class="card-body">
-    <p><strong>Customer:</strong> {{ customer['name'] }} ({{ customer['phone'] }})</p>
+
+    {% if new_customer %}
+    {# Equipment-first flow: customer info is filled in here #}
+    <div style="background:#fff8e1; border:1px solid #ffc107; border-radius:6px; padding:15px; margin-bottom:15px;">
+      <strong>New Customer — please fill in details below:</strong>
+    </div>
+    <p>
+      <strong>Name:</strong>
+      <input class="customer-info-field" type="text" id="new_name" placeholder="Full name" value="{{ customer['name'] if customer['name'] != 'Unknown' else '' }}">
+    </p>
+    <p>
+      <strong>Phone:</strong>
+      <input class="customer-info-field" type="text" id="new_phone" placeholder="Phone (optional)" value="{{ customer['phone'] or '' }}">
+    </p>
+    <p>
+      <strong>ZIP:</strong>
+      <input class="customer-info-field" type="text" id="new_zip" placeholder="ZIP Code" value="{{ customer['zip_code'] if customer['zip_code'] != '00000' else '' }}">
+    </p>
+    {% else %}
+    <p><strong>Customer:</strong> {{ customer['name'] }}{% if customer['phone'] %} ({{ customer['phone'] }}){% endif %}</p>
     <p><strong>Zip:</strong> {{ customer['zip_code'] }}</p>
+    {% endif %}
+
     {% if due_date %}
       <p><strong>Return By:</strong> {{ due_date }} ({{ checkout_period_days }} days)</p>
     {% endif %}
@@ -26,7 +61,7 @@
       </ul>
     {% endif %}
 
-    <div class="mt-4" style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
+    <div class="mt-4 no-print" style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
       <h5>Add Additional Equipment</h5>
       <form method="post" id="addEquipmentForm">
         <input type="hidden" name="action" value="add_equipment">
@@ -35,6 +70,9 @@
         {% endif %}
         {% if loan_id and not loan_ids %}
           <input type="hidden" name="loan_id" value="{{ loan_id }}">
+        {% endif %}
+        {% if new_customer %}
+          <input type="hidden" name="new_customer" value="1">
         {% endif %}
         <div>
           <input type="text" id="equipmentSearch" class="form-control" placeholder="Type equipment ID or name to search">
@@ -49,7 +87,7 @@
     </div>
 
     <script>
-      window.EQUIPMENT_SEARCH_API_KEY = '{{ search_api_key | e("js") }}';
+      window.EQUIPMENT_SEARCH_API_KEY = {{ search_api_key | tojson }};
     (function(){
       const input = document.getElementById('equipmentSearch');
       const resultsDiv = document.getElementById('searchResults');
@@ -104,25 +142,9 @@
           label.appendChild(span);
 
           label.addEventListener('keydown', function(e){
-            if(e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              checkbox.checked = !checkbox.checked;
-              return;
-            }
-            if(e.key === 'ArrowDown') {
-              e.preventDefault();
-              focusResult(index + 1);
-              return;
-            }
-            if(e.key === 'ArrowUp') {
-              e.preventDefault();
-              if(index === 0) {
-                input.focus();
-                return;
-              }
-              focusResult(index - 1);
-              return;
-            }
+            if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); checkbox.checked = !checkbox.checked; return; }
+            if(e.key === 'ArrowDown') { e.preventDefault(); focusResult(index + 1); return; }
+            if(e.key === 'ArrowUp') { e.preventDefault(); if(index === 0){ input.focus(); return; } focusResult(index - 1); return; }
           });
 
           resultsDiv.appendChild(label);
@@ -134,31 +156,21 @@
         if (index < 0) index = 0;
         if (index >= currentItems.length) index = currentItems.length - 1;
         const next = resultsDiv.querySelector('[data-index="' + index + '"]');
-        if (next) {
-          focusedIndex = index;
-          next.focus();
-        }
+        if (next) { focusedIndex = index; next.focus(); }
       }
 
       input.addEventListener('keydown', function(e){
-        if (e.key === 'ArrowDown' && currentItems.length > 0) {
-          e.preventDefault();
-          focusResult(0);
-        }
+        if (e.key === 'ArrowDown' && currentItems.length > 0) { e.preventDefault(); focusResult(0); }
       });
 
       input.addEventListener('input', function(e){
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          search(e.target.value.trim());
-        }, 250);
+        debounceTimer = setTimeout(() => { search(e.target.value.trim()); }, 250);
       });
 
       function getApiHeaders() {
         const headers = {};
-        if (window.EQUIPMENT_SEARCH_API_KEY) {
-          headers['X-API-KEY'] = window.EQUIPMENT_SEARCH_API_KEY;
-        }
+        if (window.EQUIPMENT_SEARCH_API_KEY) { headers['X-API-KEY'] = window.EQUIPMENT_SEARCH_API_KEY; }
         return headers;
       }
 
@@ -166,20 +178,13 @@
         currentQuery = q;
         if (!q) {
           resultsDiv.innerHTML = '<div style="color:#666;">Enter an equipment ID or part of the name to search available items.</div>';
-          currentItems = [];
-          focusedIndex = -1;
-          return;
+          currentItems = []; focusedIndex = -1; return;
         }
         const params = new URLSearchParams();
         params.set('q', q);
         resultsDiv.innerHTML = '<div style="color:#666;">Searching...</div>';
-        fetch('/api/equipment_search?' + params.toString(), {
-          headers: getApiHeaders(),
-        })
-          .then(r => {
-            if (!r.ok) throw new Error('Search request failed');
-            return r.json();
-          })
+        fetch('/api/equipment_search?' + params.toString(), { headers: getApiHeaders() })
+          .then(r => { if (!r.ok) throw new Error('Search request failed'); return r.json(); })
           .then(data => renderResults(data, q))
           .catch(err => { resultsDiv.innerHTML = '<div style="color:crimson;">Search failed</div>'; });
       }
@@ -192,6 +197,12 @@
 
     <form method="post" onsubmit="prepareSignature()">
       <input type="hidden" name="signature_data" id="signature_data">
+      {% if new_customer %}
+        <input type="hidden" name="new_customer" value="1">
+        <input type="hidden" name="new_name" id="hidden_new_name">
+        <input type="hidden" name="new_phone" id="hidden_new_phone">
+        <input type="hidden" name="new_zip" id="hidden_new_zip">
+      {% endif %}
       {% if loan_ids %}
         <input type="hidden" name="loan_ids" value="{{ loan_ids }}">
       {% endif %}
@@ -247,6 +258,14 @@ function clearSig(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
 function prepareSignature(){
   let data = canvas.toDataURL('image/png');
   document.getElementById('signature_data').value = data;
+  {% if new_customer %}
+  var nameEl = document.getElementById('new_name');
+  var phoneEl = document.getElementById('new_phone');
+  var zipEl = document.getElementById('new_zip');
+  if(nameEl) document.getElementById('hidden_new_name').value = nameEl.value;
+  if(phoneEl) document.getElementById('hidden_new_phone').value = phoneEl.value;
+  if(zipEl) document.getElementById('hidden_new_zip').value = zipEl.value;
+  {% endif %}
 }
 </script>
 {% endblock %}

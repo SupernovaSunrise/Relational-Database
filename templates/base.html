@@ -135,6 +135,74 @@
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const CHECKOUT_PERIOD_DAYS = 120;
+
+            function saveCell(cell, rowId, field, table, newValue, originalValue) {
+                const payload = {
+                    table: table,
+                    row_id: rowId,
+                    field: field,
+                    value: newValue,
+                };
+                fetch('/inline_update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(function(response) {
+                    return response.json().then(function(data) {
+                        if (!response.ok || data.error) {
+                            throw new Error(data.error || 'Update failed.');
+                        }
+                        cell.dataset.originalValue = newValue;
+                        // If we just saved a new equipment_id, update all sibling
+                        // cells in this row that reference the old ID so future
+                        // edits use the correct row_id.
+                        if (field === 'equipment_id') {
+                            const row = cell.closest('tr');
+                            if (row) {
+                                row.querySelectorAll('[data-table="equipment"]').forEach(function(sibling) {
+                                    sibling.dataset.rowId = newValue;
+                                });
+                                row.querySelectorAll('[data-table="loans"][data-field="equipment_id"]').forEach(function(sibling) {
+                                    sibling.dataset.rowId = newValue;
+                                });
+                            }
+                        }
+                        // If checked_out_date changed, auto-update due_date cell
+                        if (field === 'checked_out_date') {
+                            var d = new Date(newValue);
+                            if (!isNaN(d.getTime())) {
+                                d.setDate(d.getDate() + CHECKOUT_PERIOD_DAYS);
+                                var yyyy = d.getFullYear();
+                                var mm = String(d.getMonth() + 1).padStart(2, '0');
+                                var dd = String(d.getDate()).padStart(2, '0');
+                                var newDueDate = yyyy + '-' + mm + '-' + dd;
+                                var row = cell.closest('tr');
+                                if (row) {
+                                    var dueDateCell = row.querySelector('[data-field="due_date"]');
+                                    if (dueDateCell) {
+                                        dueDateCell.textContent = newDueDate;
+                                        saveCell(
+                                            dueDateCell,
+                                            dueDateCell.dataset.rowId,
+                                            'due_date',
+                                            dueDateCell.dataset.table,
+                                            newDueDate,
+                                            dueDateCell.dataset.originalValue || ''
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    });
+                })
+                .catch(function(error) {
+                    alert('Update failed: ' + error.message);
+                    cell.textContent = originalValue;
+                });
+            }
+
             const editableCells = document.querySelectorAll('td[contenteditable="true"][data-table][data-row-id][data-field]');
             editableCells.forEach(function(cell) {
                 cell.addEventListener('focus', function() {
@@ -149,34 +217,8 @@
                 cell.addEventListener('blur', function() {
                     const originalValue = cell.dataset.originalValue || '';
                     const newValue = cell.textContent.trim();
-                    if (newValue === originalValue) {
-                        return;
-                    }
-                    const payload = {
-                        table: cell.dataset.table,
-                        row_id: cell.dataset.rowId,
-                        field: cell.dataset.field,
-                        value: newValue,
-                    };
-                    fetch('/inline_update', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
-                    })
-                    .then(function(response) {
-                        return response.json().then(function(data) {
-                            if (!response.ok || data.error) {
-                                throw new Error(data.error || 'Update failed.');
-                            }
-                            cell.dataset.originalValue = newValue;
-                        });
-                    })
-                    .catch(function(error) {
-                        alert('Update failed: ' + error.message);
-                        cell.textContent = originalValue;
-                    });
+                    if (newValue === originalValue) return;
+                    saveCell(cell, cell.dataset.rowId, cell.dataset.field, cell.dataset.table, newValue, originalValue);
                 });
             });
         });

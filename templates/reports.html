@@ -38,6 +38,36 @@
     .print-button {
         margin-bottom: 20px;
     }
+    .analytics-box {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+        border-left: 4px solid #007bff;
+    }
+    .analytics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    .analytics-stat {
+        background: white;
+        padding: 15px;
+        border-radius: 6px;
+        text-align: center;
+        border: 1px solid #ddd;
+    }
+    .analytics-stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #007bff;
+        margin-bottom: 5px;
+    }
+    .analytics-stat-label {
+        font-size: 14px;
+        color: #666;
+    }
 </style>
 
 <h1>Reports</h1>
@@ -48,6 +78,7 @@
         <select id="report_type" onchange="window.location.href='{{ url_for('reports') }}?report_type=' + this.value + '&year_filter={{ year_filter or '' }}'">
             <option value="checkout" {% if report_type == 'checkout' %}selected{% endif %}>Checkout Log</option>
             <option value="item_sales" {% if report_type == 'item_sales' %}selected{% endif %}>Item Sales Log</option>
+            <option value="analytics" {% if report_type == 'analytics' %}selected{% endif %}>Analytics</option>
         </select>
     </div>
     
@@ -72,64 +103,139 @@
     <button onclick="window.print()" class="btn" style="background-color: #28a745;">Print Report</button>
 </div>
 
-<h2>{{ report_title }}{% if year_filter %} - {{ year_filter }}{% endif %}</h2>
+{% if report_type == 'analytics' %}
+    <h2>Analytics Dashboard{% if year_filter %} - {{ year_filter }}{% endif %}</h2>
+    
+    {% if analytics_summary %}
+    <div class="analytics-box">
+        <h3>Checkout Summary</h3>
+        <div class="analytics-grid">
+            <div class="analytics-stat">
+                <div class="analytics-stat-value">{{ analytics_summary.total_checkouts }}</div>
+                <div class="analytics-stat-label">Total Checkouts</div>
+            </div>
+            <div class="analytics-stat">
+                <div class="analytics-stat-value">{{ analytics_summary.unique_guests }}</div>
+                <div class="analytics-stat-label">Unique Guests</div>
+            </div>
+            <div class="analytics-stat">
+                <div class="analytics-stat-value">{{ analytics_summary.avg_per_day|round(1) }}</div>
+                <div class="analytics-stat-label">Avg Checkouts/Day</div>
+            </div>
+        </div>
+    </div>
 
-{% if report_data %}
-<table>
-    <thead>
-        <tr>
-            {% if report_type == 'checkout' %}
-                <th>Checkout Date</th>
-                <th>Equipment ID</th>
-                <th>Item Name</th>
-                <th>Customer ZIP Code</th>
-                <th>Actions</th>
-            {% else %}
-                <th>Deletion Date</th>
-                <th>Equipment ID</th>
-                <th>Item Name</th>
-                <th>Actions</th>
-            {% endif %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in report_data %}
-        <tr>
-            {% if report_type == 'checkout' %}
-                <td>{{ item.checkout_date }}</td>
-                <td>{{ item.equipment_id }}</td>
-                <td>{{ item.item_name }}</td>
-                <td>{{ item.customer_zip_code }}</td>
-                <td>
-                    <form method="post" style="display:inline;">
-                        <input type="hidden" name="action" value="delete_checkout">
-                        <input type="hidden" name="checkout_id" value="{{ item.id }}">
-                        <input type="hidden" name="report_type" value="{{ report_type }}">
-                        <input type="hidden" name="year_filter" value="{{ year_filter }}">
-                        <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
-                    </form>
-                </td>
-            {% else %}
-                <td>{{ item.deletion_date }}</td>
-                <td>{{ item.equipment_id }}</td>
-                <td>{{ item.item_name }}</td>
-                <td>
-                    <form method="post" style="display:inline;">
-                        <input type="hidden" name="action" value="delete_item_sale">
-                        <input type="hidden" name="item_sale_id" value="{{ item.id }}">
-                        <input type="hidden" name="report_type" value="{{ report_type }}">
-                        <input type="hidden" name="year_filter" value="{{ year_filter }}">
-                        <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
-                    </form>
-                </td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-<p style="margin-top: 20px;"><strong>Total Records: {{ report_data|length }}</strong></p>
+    <div class="analytics-box">
+        <h3>Guests Per Day</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Guest Count</th>
+                    <th>Items Checked Out</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for day_data in daily_guests %}
+                <tr>
+                    <td>{{ day_data.date }}</td>
+                    <td><strong>{{ day_data.guest_count }}</strong></td>
+                    <td>{{ day_data.item_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="analytics-box">
+        <h3>Monthly Averages</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Total Guests</th>
+                    <th>Total Items</th>
+                    <th>Avg Guests/Day</th>
+                    <th>Avg Items/Day</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for month_data in monthly_stats %}
+                <tr>
+                    <td>{{ month_data.month_year }}</td>
+                    <td>{{ month_data.total_guests }}</td>
+                    <td>{{ month_data.total_items }}</td>
+                    <td>{{ month_data.avg_guests_per_day|round(1) }}</td>
+                    <td>{{ month_data.avg_items_per_day|round(1) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>No checkout data available for analytics.</p>
+    {% endif %}
+
 {% else %}
-<p>No records found for the selected filters.</p>
+    <h2>{{ report_title }}{% if year_filter %} - {{ year_filter }}{% endif %}</h2>
+
+    {% if report_data %}
+    <table>
+        <thead>
+            <tr>
+                {% if report_type == 'checkout' %}
+                    <th>Checkout Date</th>
+                    <th>Equipment ID</th>
+                    <th>Item Name</th>
+                    <th>Customer ZIP Code</th>
+                    <th>Actions</th>
+                {% else %}
+                    <th>Deletion Date</th>
+                    <th>Equipment ID</th>
+                    <th>Item Name</th>
+                    <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data %}
+            <tr>
+                {% if report_type == 'checkout' %}
+                    <td>{{ item.checkout_date }}</td>
+                    <td>{{ item.equipment_id }}</td>
+                    <td>{{ item.item_name }}</td>
+                    <td>{{ item.customer_zip_code }}</td>
+                    <td>
+                        <form method="post" style="display:inline;">
+                            <input type="hidden" name="action" value="delete_checkout">
+                            <input type="hidden" name="checkout_id" value="{{ item.id }}">
+                            <input type="hidden" name="report_type" value="{{ report_type }}">
+                            <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                            <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
+                        </form>
+                    </td>
+                {% else %}
+                    <td>{{ item.deletion_date }}</td>
+                    <td>{{ item.equipment_id }}</td>
+                    <td>{{ item.item_name }}</td>
+                    <td>
+                        <form method="post" style="display:inline;">
+                            <input type="hidden" name="action" value="delete_item_sale">
+                            <input type="hidden" name="item_sale_id" value="{{ item.id }}">
+                            <input type="hidden" name="report_type" value="{{ report_type }}">
+                            <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                            <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
+                        </form>
+                    </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p style="margin-top: 20px;"><strong>Total Records: {{ report_data|length }}</strong></p>
+    {% else %}
+    <p>No records found for the selected filters.</p>
+    {% endif %}
 {% endif %}
 
 {% endblock %}

@@ -202,12 +202,12 @@ def master_control():
             phone = request.form['phone'].strip()
             zip_code = request.form['zip_code'].strip()
 
-            if not name or not phone or not zip_code:
-                flash('All customer fields are required.')
+            if not name or not zip_code:
+                flash('Name and ZIP Code are required.')
                 return redirect(url_for('master_control'))
 
-            digits = re.sub(r"\D", "", phone)
-            if len(digits) < 10:
+            digits = re.sub(r"\D", "", phone) if phone else ''
+            if phone and len(digits) < 10:
                 flash('Phone number must have at least 10 digits.')
                 return redirect(url_for('master_control'))
 
@@ -217,15 +217,21 @@ def master_control():
 
             conn = connect_db()
             cursor = conn.cursor()
-            
-            # Check for duplicate customers (same name and phone)
-            cursor.execute(
-                "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
-                (name, f"%{digits}%"),
-            )
+
+            # Check for duplicate customers (same name; include phone only if provided)
+            if digits:
+                cursor.execute(
+                    "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
+                    (name, f"%{digits}%"),
+                )
+            else:
+                cursor.execute(
+                    "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND (phone IS NULL OR phone = '')",
+                    (name,),
+                )
             if cursor.fetchone():
                 conn.close()
-                flash('A customer with this name and phone number already exists.')
+                flash('A customer with this name already exists.')
                 return redirect(url_for('master_control'))
             
             try:
@@ -267,7 +273,7 @@ def master_control():
                 conn.close()
 
         elif action == 'checkout':
-            customer_reference = request.form['customer_reference'].strip()
+            customer_reference = request.form.get('customer_reference', '').strip()
             equipment_ids = request.form.getlist('equipment_ids')
             if not equipment_ids:
                 equipment_id = request.form.get('equipment_id', '').strip().upper()
@@ -275,9 +281,54 @@ def master_control():
                     equipment_ids = [equipment_id]
             equipment_ids = [eid.strip().upper() for eid in equipment_ids if eid.strip()]
 
-            if not customer_reference or not equipment_ids:
-                flash('Please enter a customer reference and select at least one piece of equipment.')
+            if not equipment_ids:
+                flash('Please select at least one piece of equipment.')
                 return redirect(url_for('master_control'))
+
+            # No customer reference — create a placeholder and collect info on the agreement form
+            if not customer_reference:
+                conn = connect_db()
+                cursor = conn.cursor()
+                checked_out_date = datetime.today().date()
+                due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+                cursor.execute(
+                    "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
+                    ('Unknown', '', '00000', checked_out_date.isoformat()),
+                )
+                new_customer_id = cursor.lastrowid
+                loan_ids = []
+                for equipment_id in equipment_ids:
+                    cursor.execute(
+                        "SELECT equipment_id, item_name FROM equipment WHERE equipment_id = ?",
+                        (equipment_id,)
+                    )
+                    equipment_row = cursor.fetchone()
+                    if not equipment_row:
+                        conn.close()
+                        flash(f'Equipment {equipment_id} does not exist.')
+                        return redirect(url_for('master_control'))
+                    cursor.execute(
+                        "SELECT id FROM loans WHERE equipment_id = ? AND returned_date IS NULL",
+                        (equipment_id,)
+                    )
+                    if cursor.fetchone():
+                        conn.close()
+                        flash(f'Equipment {equipment_id} is already checked out.')
+                        return redirect(url_for('master_control'))
+                    cursor.execute(
+                        "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date) VALUES (?, ?, ?, ?, ?, ?)",
+                        (new_customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat(), None, None),
+                    )
+                    loan_id = cursor.lastrowid
+                    loan_ids.append(str(loan_id))
+                    is_first = 1 if len(loan_ids) == 1 else 0
+                    cursor.execute(
+                        "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
+                        ('00000', equipment_row['item_name'], equipment_id, checked_out_date.isoformat(), is_first),
+                    )
+                conn.commit()
+                conn.close()
+                return redirect(url_for('customer_agreement', customer_id=new_customer_id, loan_ids=','.join(loan_ids), new_customer=1))
 
             matches = find_customer_matches(customer_reference)
             if not matches:
@@ -1001,6 +1052,7 @@ def customer_agreement(customer_id):
         flash('Customer not found.')
         return redirect(url_for('customers'))
 
+    new_customer = request.args.get('new_customer') or request.form.get('new_customer')
     loan_ids_csv = request.args.get('loan_ids')
     loan_id = request.args.get('loan_id')
     loans = []
@@ -1115,6 +1167,22 @@ def customer_agreement(customer_id):
             return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv))
 
         if action == 'save':
+            # If new_customer, update the placeholder with filled-in details
+            if new_customer:
+                new_name = request.form.get('new_name', '').strip()
+                new_phone = request.form.get('new_phone', '').strip()
+                new_zip = request.form.get('new_zip', '').strip()
+                
+                if new_name:
+                    conn = connect_db()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE customers SET name = ?, phone = ?, zip_code = ? WHERE id = ?",
+                        (new_name, new_phone, new_zip if new_zip else '00000', customer_id),
+                    )
+                    conn.commit()
+                    conn.close()
+
             waiver_agreed = 'waiver_agreed' in request.form
             signature_agreed = 'signature_agreed' in request.form
             signature_data = request.form.get('signature_data', '')
@@ -1164,6 +1232,7 @@ def customer_agreement(customer_id):
         checkout_period_days=CHECKOUT_PERIOD_DAYS,
         loans=loans,
         search_api_key=SEARCH_API_KEY or '',
+        new_customer=new_customer,
     )
 
 

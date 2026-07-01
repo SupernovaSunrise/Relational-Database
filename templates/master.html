@@ -85,7 +85,7 @@
 <form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
         <label for="search">Search equipment or customer</label>
-        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item name, customer, or ZIP">
+        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item name, customer, or phone">
     </div>
     <button type="submit" class="btn">Search</button>
     <a href="{{ url_for('master_control') }}" class="btn" style="background-color: #6c757d;">Clear</a>
@@ -97,7 +97,7 @@
             <th><a href="{{ url_for('master_control', search=search, sort_by='equipment_id', sort_dir='desc' if sort_by == 'equipment_id' and sort_dir == 'asc' else 'asc') }}">Equipment ID {% if sort_by == 'equipment_id' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
             <th><a href="{{ url_for('master_control', search=search, sort_by='item_name', sort_dir='desc' if sort_by == 'item_name' and sort_dir == 'asc' else 'asc') }}">Equipment Name {% if sort_by == 'item_name' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
             <th><a href="{{ url_for('master_control', search=search, sort_by='customer_name', sort_dir='desc' if sort_by == 'customer_name' and sort_dir == 'asc' else 'asc') }}">Customer Name {% if sort_by == 'customer_name' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
-            <th><a href="{{ url_for('master_control', search=search, sort_by='customer_zip', sort_dir='desc' if sort_by == 'customer_zip' and sort_dir == 'asc' else 'asc') }}">Customer ZIP {% if sort_by == 'customer_zip' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th><a href="{{ url_for('master_control', search=search, sort_by='customer_phone', sort_dir='desc' if sort_by == 'customer_phone' and sort_dir == 'asc' else 'asc') }}">Customer Phone # {% if sort_by == 'customer_phone' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
             <th><a href="{{ url_for('master_control', search=search, sort_by='checked_out_date', sort_dir='desc' if sort_by == 'checked_out_date' and sort_dir == 'asc' else 'asc') }}">Date Checked Out {% if sort_by == 'checked_out_date' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
             <th><a href="{{ url_for('master_control', search=search, sort_by='due_date', sort_dir='desc' if sort_by == 'due_date' and sort_dir == 'asc' else 'asc') }}">Return Date {% if sort_by == 'due_date' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
             <th>Action</th>
@@ -109,7 +109,7 @@
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="item_name">{{ item.item_name }}</td>
             <td {% if item.customer_name %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="name"{% endif %}>{{ item.customer_name or '' }}</td>
-            <td {% if item.customer_zip %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="zip_code"{% endif %}>{{ item.customer_zip or '' }}</td>
+            <td {% if item.customer_phone %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="phone"{% endif %}>{{ item.customer_phone or '' }}</td>
             <td {% if item.loan_id %}contenteditable="true" data-table="loans" data-row-id="{{ item.loan_id }}" data-field="checked_out_date"{% endif %}>{{ item.checked_out_date or '' }}</td>
             <td {% if item.loan_id %}contenteditable="true" data-table="loans" data-row-id="{{ item.loan_id }}" data-field="due_date"{% endif %}>{{ item.due_date or '' }}</td>
             <td>

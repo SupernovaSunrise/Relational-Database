@@ -35,6 +35,31 @@ SEARCH_API_KEY = os.environ.get('EQUIPMENT_SEARCH_API_KEY')
 
 EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z]{2}-\d{4}$")
 
+def normalize_phone(phone):
+    digits = re.sub(r"\D", "", str(phone or ""))
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    return digits
+
+
+def format_phone(phone):
+    digits = normalize_phone(phone)
+    if len(digits) != 10:
+        return phone
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+
+
+def customer_phone_exists(phone_digits, cursor, exclude_id=None):
+    if not phone_digits:
+        return False
+    cursor.execute("SELECT id, phone FROM customers")
+    for row in cursor.fetchall():
+        existing_digits = normalize_phone(row["phone"])
+        if existing_digits == phone_digits and (exclude_id is None or row["id"] != exclude_id):
+            return True
+    return False
+
+
 def connect_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -152,27 +177,42 @@ def init_db():
     if "is_first_item" not in log_columns:
         cursor.execute("ALTER TABLE checkout_log ADD COLUMN is_first_item INTEGER NOT NULL DEFAULT 0")
         conn.commit()
-    
+
+    # Reformat existing stored customer phone numbers to the standard display format.
+    cursor.execute("SELECT id, phone FROM customers")
+    for row in cursor.fetchall():
+        formatted = format_phone(row["phone"])
+        if formatted != row["phone"]:
+            cursor.execute("UPDATE customers SET phone = ? WHERE id = ?", (formatted, row["id"]))
+    conn.commit()
     conn.close()
 
 def find_customer_matches(customer_reference):
     conn = connect_db()
     cursor = conn.cursor()
-    if customer_reference.isdigit():
+
+    search_pattern = f"%{customer_reference}%"
+    normalized_search = normalize_phone(customer_reference)
+    if customer_reference.isdigit() and len(customer_reference) <= 6:
         cursor.execute(
             "SELECT id, name, phone, zip_code FROM customers WHERE id = ?",
             (customer_reference,),
         )
         rows = cursor.fetchall()
-        conn.close()
-        return rows
+        if rows:
+            conn.close()
+            return rows
 
-    cursor.execute(
+    query = (
         "SELECT id, name, phone, zip_code FROM customers "
-        "WHERE phone LIKE ? OR name LIKE ? OR zip_code LIKE ? "
-        "ORDER BY name LIMIT 20",
-        (f"%{customer_reference}%", f"%{customer_reference}%", f"%{customer_reference}%"),
+        "WHERE LOWER(name) LIKE ? OR phone LIKE ? OR zip_code LIKE ? "
     )
+    params = [search_pattern, search_pattern, search_pattern]
+    if normalized_search:
+        query += "OR REPLACE(REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-',''),' ','') LIKE ? "
+        params.append(f"%{normalized_search}%")
+    query += "ORDER BY name LIMIT 20"
+    cursor.execute(query, tuple(params))
     rows = cursor.fetchall()
     conn.close()
     return rows
@@ -206,7 +246,7 @@ def master_control():
                 flash('Name and ZIP Code are required.')
                 return redirect(url_for('master_control'))
 
-            digits = re.sub(r"\D", "", phone) if phone else ''
+            digits = normalize_phone(phone) if phone else ''
             if phone and len(digits) < 10:
                 flash('Phone number must have at least 10 digits.')
                 return redirect(url_for('master_control'))
@@ -218,26 +258,16 @@ def master_control():
             conn = connect_db()
             cursor = conn.cursor()
 
-            # Check for duplicate customers (same name; include phone only if provided)
-            if digits:
-                cursor.execute(
-                    "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
-                    (name, f"%{digits}%"),
-                )
-            else:
-                cursor.execute(
-                    "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND (phone IS NULL OR phone = '')",
-                    (name,),
-                )
-            if cursor.fetchone():
+            if digits and customer_phone_exists(digits, cursor):
                 conn.close()
-                flash('A customer with this name already exists.')
+                flash('A customer with this phone number already exists.')
                 return redirect(url_for('master_control'))
-            
+
+            formatted_phone = format_phone(phone) if phone else ''
             try:
                 cursor.execute(
                     "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
-                    (name, phone, zip_code, datetime.today().date().isoformat()),
+                    (name, formatted_phone, zip_code, datetime.today().date().isoformat()),
                 )
                 conn.commit()
                 flash(f'Customer "{name}" added successfully.')
@@ -408,7 +438,7 @@ def master_control():
         'equipment_id': 'equipment.equipment_id',
         'item_name': 'equipment.item_name',
         'customer_name': 'customers.name',
-        'customer_zip': 'customers.zip_code',
+        'customer_phone': 'customers.phone',
         'checked_out_date': 'loans.checked_out_date',
         'due_date': 'loans.due_date',
     }
@@ -418,8 +448,8 @@ def master_control():
     conn = connect_db()
     cursor = conn.cursor()
     query = (
-        "SELECT equipment.equipment_id, equipment.item_name, customers.name AS customer_name, "
-        "customers.zip_code AS customer_zip, loans.id AS loan_id, loans.checked_out_date, loans.due_date "
+        "SELECT equipment.equipment_id, equipment.item_name, customers.id AS customer_id, customers.name AS customer_name, "
+        "customers.phone AS customer_phone, loans.id AS loan_id, loans.checked_out_date, loans.due_date "
         "FROM equipment "
         "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
         "LEFT JOIN customers ON loans.customer_id = customers.id "
@@ -429,7 +459,7 @@ def master_control():
         search_pattern = f"%{search}%"
         query += (
             "WHERE equipment.equipment_id LIKE ? OR equipment.item_name LIKE ? "
-            "OR customers.name LIKE ? OR customers.zip_code LIKE ? "
+            "OR customers.name LIKE ? OR customers.phone LIKE ? "
         )
         params = (search_pattern, search_pattern, search_pattern, search_pattern)
     query += f"ORDER BY {sort_column} {sort_direction}"
@@ -486,34 +516,28 @@ def add_customer():
             flash('All fields are required.')
             return redirect(url_for('add_customer'))
 
-        # Validate phone (at least 10 digits)
-        digits = re.sub(r"\D", "", phone)
+        digits = normalize_phone(phone)
         if len(digits) < 10:
             flash('Phone number must have at least 10 digits.')
             return redirect(url_for('add_customer'))
 
-        # Validate zip code (5 digits)
         if not re.fullmatch(r"\d{5}", zip_code):
             flash('Zip code must be 5 digits.')
             return redirect(url_for('add_customer'))
 
         conn = connect_db()
         cursor = conn.cursor()
-        
-        # Check for duplicate customers (same name and phone)
-        cursor.execute(
-            "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
-            (name, f"%{digits}%"),
-        )
-        if cursor.fetchone():
+
+        if customer_phone_exists(digits, cursor):
             conn.close()
-            flash('A customer with this name and phone number already exists.')
+            flash('A customer with this phone number already exists.')
             return redirect(url_for('add_customer'))
-        
+
+        formatted_phone = format_phone(phone)
         try:
             cursor.execute(
                 "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
-                (name, phone, zip_code, datetime.today().date().isoformat()),
+                (name, formatted_phone, zip_code, datetime.today().date().isoformat()),
             )
             conn.commit()
             flash(f'Customer "{name}" added successfully.')
@@ -741,16 +765,12 @@ def settings():
                                 except Exception:
                                     continue
                                 if name and phone and zip_code:
-                                    digits = re.sub(r"\D", "", str(phone))
+                                    digits = normalize_phone(str(phone))
                                     if len(digits) >= 10 and re.fullmatch(r"\d{5}", str(zip_code)):
-                                        cursor.execute(
-                                            "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
-                                            (name, f"%{digits}%"),
-                                        )
-                                        if not cursor.fetchone():
+                                        if not customer_phone_exists(digits, cursor):
                                             cursor.execute(
                                                 "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
-                                                (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
+                                                (str(name).strip(), format_phone(phone), str(zip_code), datetime.today().date().isoformat()),
                                             )
                                             count += 1
                     else:
@@ -759,16 +779,12 @@ def settings():
                         for row in ws.iter_rows(min_row=2, values_only=True):
                             if row[0] and row[1] and row[2]:
                                 name, phone, zip_code = row[0], row[1], row[2]
-                                digits = re.sub(r"\D", "", str(phone))
+                                digits = normalize_phone(str(phone))
                                 if len(digits) >= 10 and re.fullmatch(r"\d{5}", str(zip_code)):
-                                    cursor.execute(
-                                        "SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND phone LIKE ?",
-                                        (name, f"%{digits}%"),
-                                    )
-                                    if not cursor.fetchone():
+                                    if not customer_phone_exists(digits, cursor):
                                         cursor.execute(
                                             "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
-                                            (name, str(phone), str(zip_code), datetime.today().date().isoformat()),
+                                            (str(name).strip(), format_phone(phone), str(zip_code), datetime.today().date().isoformat()),
                                         )
                                         count += 1
                     conn.commit()
@@ -969,29 +985,27 @@ def reports():
 
     elif report_type == 'analytics':
         report_title = "Analytics"
-        year_clause = "AND strftime('%Y', checkout_date) = ?" if year_filter else ""
+        year_clause = "AND strftime('%Y', checked_out_date) = ?" if year_filter else ""
         params = (year_filter,) if year_filter else ()
 
-        # Guests per day: count distinct guests (is_first_item=1) and total items per day
         cursor.execute(
-            f"""SELECT checkout_date,
-                       SUM(is_first_item) AS guest_count,
+            f"""SELECT checked_out_date AS date,
+                       COUNT(DISTINCT customer_id || '_' || checked_out_date) AS guest_count,
                        COUNT(*) AS item_count
-               FROM checkout_log
+               FROM loans
                WHERE 1=1 {year_clause}
-               GROUP BY checkout_date
-               ORDER BY checkout_date DESC""",
+               GROUP BY checked_out_date
+               ORDER BY checked_out_date DESC""",
             params,
         )
         daily_guests = cursor.fetchall()
 
-        # Monthly averages
         cursor.execute(
-            f"""SELECT strftime('%Y-%m', checkout_date) AS month_year,
-                       SUM(is_first_item) AS total_guests,
+            f"""SELECT strftime('%Y-%m', checked_out_date) AS month_year,
+                       COUNT(DISTINCT customer_id || '_' || checked_out_date) AS total_guests,
                        COUNT(*) AS total_items,
-                       COUNT(DISTINCT checkout_date) AS active_days
-               FROM checkout_log
+                       COUNT(DISTINCT checked_out_date) AS active_days
+               FROM loans
                WHERE 1=1 {year_clause}
                GROUP BY month_year
                ORDER BY month_year DESC""",
@@ -1011,7 +1025,7 @@ def reports():
 
         # Summary totals
         cursor.execute(
-            f"SELECT SUM(is_first_item) AS total_guests, COUNT(*) AS total_checkouts, COUNT(DISTINCT checkout_date) AS total_days FROM checkout_log WHERE 1=1 {year_clause}",
+            f"SELECT COUNT(DISTINCT customer_id || '_' || checked_out_date) AS total_guests, COUNT(*) AS total_checkouts, COUNT(DISTINCT checked_out_date) AS total_days FROM loans WHERE 1=1 {year_clause}",
             params,
         )
         summary_row = cursor.fetchone()
@@ -1023,8 +1037,8 @@ def reports():
                 'avg_per_day': summary_row['total_guests'] / total_days,
             }
 
-    # Available years always from checkout_log
-    cursor.execute("SELECT DISTINCT strftime('%Y', checkout_date) as year FROM checkout_log ORDER BY year DESC")
+    # Available years always from loan checked out dates
+    cursor.execute("SELECT DISTINCT strftime('%Y', checked_out_date) as year FROM loans ORDER BY year DESC")
     years = [row['year'] for row in cursor.fetchall() if row['year']]
     conn.close()
 
@@ -1120,8 +1134,10 @@ def customer_agreement(customer_id):
 
         if action == 'add_equipment':
             selected_equipment = request.form.getlist('equipment_ids')
-            if not selected_equipment:
-                flash('Please select at least one equipment item to add.')
+            new_equipment_id = request.form.get('new_equipment_id', '').strip().upper()
+            new_item_name = request.form.get('new_item_name', '').strip()
+            if not selected_equipment and not new_equipment_id:
+                flash('Please select at least one equipment item to add or provide a new equipment entry.')
                 return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
 
             conn = connect_db()
@@ -1129,6 +1145,27 @@ def customer_agreement(customer_id):
             cursor.execute("SELECT zip_code FROM customers WHERE id = ?", (customer_id,))
             cust_row = cursor.fetchone()
             customer_zip = cust_row['zip_code'] if cust_row else ''
+
+            if new_equipment_id:
+                if not new_item_name:
+                    conn.close()
+                    flash('New equipment item name is required when adding a new equipment ID.')
+                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+                if not EQUIPMENT_ID_PATTERN.fullmatch(new_equipment_id):
+                    conn.close()
+                    flash('New equipment ID must be in format AA-0000.')
+                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+                cursor.execute("SELECT equipment_id FROM equipment WHERE equipment_id = ?", (new_equipment_id,))
+                if cursor.fetchone():
+                    conn.close()
+                    flash(f'Equipment {new_equipment_id} already exists. Please select it from the available items.')
+                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+                cursor.execute(
+                    "INSERT INTO equipment (equipment_id, item_name) VALUES (?, ?)",
+                    (new_equipment_id, new_item_name),
+                )
+                selected_equipment.append(new_equipment_id)
+
             for equipment_id in selected_equipment:
                 equipment_id = equipment_id.strip().upper()
                 if not equipment_id:
@@ -1174,11 +1211,19 @@ def customer_agreement(customer_id):
                 new_zip = request.form.get('new_zip', '').strip()
                 
                 if new_name:
+                    digits = normalize_phone(new_phone) if new_phone else ''
+                    if new_phone and len(digits) < 10:
+                        flash('Phone number must have at least 10 digits.')
+                        return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
                     conn = connect_db()
                     cursor = conn.cursor()
+                    if digits and customer_phone_exists(digits, cursor, exclude_id=customer_id):
+                        conn.close()
+                        flash('A customer with this phone number already exists.')
+                        return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
                     cursor.execute(
                         "UPDATE customers SET name = ?, phone = ?, zip_code = ? WHERE id = ?",
-                        (new_name, new_phone, new_zip if new_zip else '00000', customer_id),
+                        (new_name, format_phone(new_phone) if new_phone else '', new_zip if new_zip else '00000', customer_id),
                     )
                     conn.commit()
                     conn.close()
@@ -1329,6 +1374,15 @@ def inline_update():
         if table == 'loans':
             cursor.execute(f"UPDATE loans SET {field} = ? WHERE id = ?", (value, int(row_id)))
         elif table == 'customers':
+            if field == 'phone':
+                digits = normalize_phone(value)
+                if len(digits) < 10:
+                    conn.close()
+                    return jsonify({'error': 'Phone number must have at least 10 digits.'}), 400
+                if customer_phone_exists(digits, cursor, exclude_id=int(row_id)):
+                    conn.close()
+                    return jsonify({'error': 'Phone number already exists for another customer.'}), 400
+                value = format_phone(value)
             cursor.execute(f"UPDATE customers SET {field} = ? WHERE id = ?", (value, int(row_id)))
         elif table == 'equipment':
             if field == 'equipment_id':

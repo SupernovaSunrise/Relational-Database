@@ -184,7 +184,19 @@ def init_db():
         formatted = format_phone(row["phone"])
         if formatted != row["phone"]:
             cursor.execute("UPDATE customers SET phone = ? WHERE id = ?", (formatted, row["id"]))
-    conn.commit()
+    
+    cursor.execute("PRAGMA table_info(equipment)")
+    equip_columns = [column[1] for column in cursor.fetchall()]
+    if "date_verified" not in equip_columns:
+        cursor.execute("ALTER TABLE equipment ADD COLUMN date_verified TEXT")
+        conn.commit()
+
+    cursor.execute("PRAGMA table_info(checkout_log)")
+    log_columns = [column[1] for column in cursor.fetchall()]
+    if "is_first_item" not in log_columns:
+        cursor.execute("ALTER TABLE checkout_log ADD COLUMN is_first_item INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    
     conn.close()
 
 def find_customer_matches(customer_reference):

@@ -31,7 +31,6 @@
     <a href="{{ url_for('return_equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
 
-<div id="tableContainer">
 {% if checked_out %}
 <table id="returnTable">
     <thead>
@@ -48,7 +47,7 @@
     </thead>
     <tbody>
         {% for item in checked_out %}
-        <tr class="return-row" data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.name|lower }} {{ item.zip_code|lower }}" data-due-date="{{ item.due_date }}" data-equipment-id="{{ item.equipment_id }}" data-item-name="{{ item.item_name }}" data-customer-name="{{ item.name }}" data-checked-out-date="{{ item.checked_out_date }}">
+        <tr class="return-row" data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.name|lower }} {{ item.zip_code|lower }}" data-due-date="{{ item.due_date }}" data-equipment-id="{{ item.equipment_id }}" data-item-name="{{ item.item_name }}" data-customer-name="{{ item.name }}" data-checked-out-date="{{ item.checked_out_date }}" data-customer-zip="{{ item.zip_code }}">
             <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="item_name">{{ item.item_name }}</td>
             <td>{{ item.name }}</td>
@@ -72,17 +71,19 @@
         {% endfor %}
     </tbody>
 </table>
+<p id="noResults" style="display:none; margin-top:20px;">No equipment matches your search.</p>
 {% else %}
 <p>No equipment is currently checked out.</p>
 {% endif %}
-</div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('search');
     const sortBySelect = document.getElementById('sort_by');
     const sortDirSelect = document.getElementById('sort_dir');
-    const rows = document.querySelectorAll('.return-row');
+    const rows = Array.from(document.querySelectorAll('.return-row'));
+    const noResultsMsg = document.getElementById('noResults');
+    const tbody = document.querySelector('#returnTable tbody');
     
     function applyFiltersAndSort() {
         const query = searchInput.value.toLowerCase().trim();
@@ -90,43 +91,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const sortDir = sortDirSelect.value;
         
         // Filter rows
-        const filteredRows = Array.from(rows).filter(row => {
+        const filteredRows = rows.filter(row => {
             const searchText = row.getAttribute('data-search-text');
             return !query || searchText.includes(query);
         });
         
         // Sort rows
         filteredRows.sort((a, b) => {
-            let aVal, bVal;
-            switch(sortBy) {
-                case 'due_date':
-                    aVal = a.getAttribute('data-due-date');
-                    bVal = b.getAttribute('data-due-date');
-                    break;
-                case 'equipment_id':
-                    aVal = a.getAttribute('data-equipment-id');
-                    bVal = b.getAttribute('data-equipment-id');
-                    break;
-                case 'item_name':
-                    aVal = a.getAttribute('data-item-name');
-                    bVal = b.getAttribute('data-item-name');
-                    break;
-                case 'customer_name':
-                    aVal = a.getAttribute('data-customer-name');
-                    bVal = b.getAttribute('data-customer-name');
-                    break;
-                case 'checked_out_date':
-                    aVal = a.getAttribute('data-checked-out-date');
-                    bVal = b.getAttribute('data-checked-out-date');
-                    break;
-                case 'customer_zip':
-                    aVal = a.querySelector('td:nth-child(6)').textContent;
-                    bVal = b.querySelector('td:nth-child(6)').textContent;
-                    break;
-                default:
-                    aVal = a.getAttribute('data-due-date');
-                    bVal = b.getAttribute('data-due-date');
-            }
+            let aVal = a.getAttribute('data-' + sortBy) || '';
+            let bVal = b.getAttribute('data-' + sortBy) || '';
             
             if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
             if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
@@ -134,25 +107,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         // Update visibility and reorder
-        const table = document.getElementById('returnTable');
-        const tbody = table.querySelector('tbody');
-        
-        filteredRows.forEach(row => {
-            row.style.display = '';
-            tbody.appendChild(row);
+        rows.forEach(row => {
+            row.style.display = filteredRows.includes(row) ? '' : 'none';
         });
         
-        rows.forEach(row => {
-            if (!filteredRows.includes(row)) {
-                row.style.display = 'none';
-            }
+        filteredRows.forEach(row => {
+            tbody.appendChild(row);
         });
         
         // Show message if no results
         const visibleCount = filteredRows.length;
-        if (visibleCount === 0) {
-            document.getElementById('tableContainer').innerHTML = '<p>No equipment matches your search.</p>';
-        }
+        noResultsMsg.style.display = visibleCount === 0 && query ? 'block' : 'none';
     }
     
     searchInput.addEventListener('input', applyFiltersAndSort);

@@ -15,7 +15,6 @@
 
 <a href="{{ url_for('add_customer') }}" class="btn">Add New Customer</a>
 
-<div id="tableContainer">
 {% if customers %}
 <table id="customersTable">
     <thead>
@@ -45,15 +44,16 @@
         {% endfor %}
     </tbody>
 </table>
+<p id="noResults" style="display:none; margin-top:20px;">No customers match your search.</p>
 {% else %}
 <p>No customers registered yet.</p>
 {% endif %}
-</div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('search');
-    const rows = document.querySelectorAll('.customer-row');
+    const rows = Array.from(document.querySelectorAll('.customer-row'));
+    const noResultsMsg = document.getElementById('noResults');
     
     searchInput.addEventListener('input', function() {
         const query = this.value.toLowerCase().trim();
@@ -61,20 +61,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         rows.forEach(row => {
             const searchText = row.getAttribute('data-search-text');
-            if (!query || searchText.includes(query)) {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-            }
+            const matches = !query || searchText.includes(query);
+            row.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
         });
         
-        const table = document.getElementById('customersTable');
-        if (table && visibleCount === 0) {
-            document.getElementById('tableContainer').innerHTML = '<p>No customers match your search.</p>';
-        } else if (table && query) {
-            document.getElementById('tableContainer').innerHTML = table.outerHTML;
-        }
+        noResultsMsg.style.display = visibleCount === 0 && query ? 'block' : 'none';
     });
 });
 </script>

@@ -90,7 +90,6 @@
     <a href="{{ url_for('master_control') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
 
-<div id="tableContainer">
 <table id="masterTable">
     <thead>
         <tr>
@@ -135,13 +134,16 @@
         {% endfor %}
     </tbody>
 </table>
-</div>
+
+<p id="noResults" style="display:none; margin-top:20px;">No equipment matches your search.</p>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('search');
-    const rows = document.querySelectorAll('.master-row');
     const sortLinks = document.querySelectorAll('.sort-link');
+    const rows = Array.from(document.querySelectorAll('.master-row'));
+    const tbody = document.querySelector('#masterTable tbody');
+    const noResultsMsg = document.getElementById('noResults');
     
     let currentSort = 'equipment_id';
     let sortDirection = 'asc';
@@ -150,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const query = searchInput.value.toLowerCase().trim();
         
         // Filter rows
-        const filteredRows = Array.from(rows).filter(row => {
+        const filteredRows = rows.filter(row => {
             const searchText = row.getAttribute('data-search-text');
             return !query || searchText.includes(query);
         });
@@ -166,17 +168,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         // Update visibility and reorder
-        const tbody = document.querySelector('#masterTable tbody');
-        
-        filteredRows.forEach(row => {
-            row.style.display = '';
-            tbody.appendChild(row);
+        rows.forEach(row => {
+            row.style.display = filteredRows.includes(row) ? '' : 'none';
         });
         
-        rows.forEach(row => {
-            if (!filteredRows.includes(row)) {
-                row.style.display = 'none';
-            }
+        filteredRows.forEach(row => {
+            tbody.appendChild(row);
         });
         
         // Update sort indicators
@@ -191,9 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Show message if no results
         const visibleCount = filteredRows.length;
-        if (visibleCount === 0) {
-            document.getElementById('tableContainer').innerHTML = '<p>No equipment matches your search.</p>';
-        }
+        noResultsMsg.style.display = visibleCount === 0 && query ? 'block' : 'none';
     }
     
     searchInput.addEventListener('input', applyFiltersAndSort);
@@ -211,6 +206,9 @@ document.addEventListener('DOMContentLoaded', function() {
             applyFiltersAndSort();
         });
     });
+    
+    // Initial sort
+    applyFiltersAndSort();
 });
 </script>
 {% endblock %}

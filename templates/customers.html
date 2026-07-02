@@ -5,19 +5,19 @@
 {% block content %}
 <h1>Customers</h1>
 
-<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+<form id="searchForm" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px;">
         <label for="search">Search customers</label>
-        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Name, phone, or zip">
+        <input id="search" type="search" placeholder="Name, phone, or zip" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
     </div>
-    <button type="submit" class="btn">Search</button>
     <a href="{{ url_for('customers') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
 
 <a href="{{ url_for('add_customer') }}" class="btn">Add New Customer</a>
 
+<div id="tableContainer">
 {% if customers %}
-<table>
+<table id="customersTable">
     <thead>
         <tr>
             <th>ID</th>
@@ -30,7 +30,7 @@
     </thead>
     <tbody>
         {% for customer in customers %}
-        <tr>
+        <tr class="customer-row" data-search-text="{{ customer.name|lower }} {{ customer.phone|lower }} {{ customer.zip_code|lower }}">
             <td>{{ customer.id }}</td>
             <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="name">{{ customer.name }}</td>
             <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="phone">{{ customer.phone }}</td>
@@ -48,4 +48,34 @@
 {% else %}
 <p>No customers registered yet.</p>
 {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('search');
+    const rows = document.querySelectorAll('.customer-row');
+    
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const searchText = row.getAttribute('data-search-text');
+            if (!query || searchText.includes(query)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        const table = document.getElementById('customersTable');
+        if (table && visibleCount === 0) {
+            document.getElementById('tableContainer').innerHTML = '<p>No customers match your search.</p>';
+        } else if (table && query) {
+            document.getElementById('tableContainer').innerHTML = table.outerHTML;
+        }
+    });
+});
+</script>
 {% endblock %}

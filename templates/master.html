@@ -82,30 +82,30 @@
     </section>
 </div>
 
-<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+<form id="searchForm" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
         <label for="search">Search equipment or customer</label>
-        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item name, customer, or phone">
+        <input id="search" type="search" placeholder="Equipment ID, item name, customer, or phone" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
     </div>
-    <button type="submit" class="btn">Search</button>
     <a href="{{ url_for('master_control') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
 
-<table>
+<div id="tableContainer">
+<table id="masterTable">
     <thead>
         <tr>
-            <th><a href="{{ url_for('master_control', search=search, sort_by='equipment_id', sort_dir='desc' if sort_by == 'equipment_id' and sort_dir == 'asc' else 'asc') }}">Equipment ID {% if sort_by == 'equipment_id' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
-            <th><a href="{{ url_for('master_control', search=search, sort_by='item_name', sort_dir='desc' if sort_by == 'item_name' and sort_dir == 'asc' else 'asc') }}">Equipment Name {% if sort_by == 'item_name' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
-            <th><a href="{{ url_for('master_control', search=search, sort_by='customer_name', sort_dir='desc' if sort_by == 'customer_name' and sort_dir == 'asc' else 'asc') }}">Customer Name {% if sort_by == 'customer_name' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
-            <th><a href="{{ url_for('master_control', search=search, sort_by='customer_phone', sort_dir='desc' if sort_by == 'customer_phone' and sort_dir == 'asc' else 'asc') }}">Customer Phone # {% if sort_by == 'customer_phone' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
-            <th><a href="{{ url_for('master_control', search=search, sort_by='checked_out_date', sort_dir='desc' if sort_by == 'checked_out_date' and sort_dir == 'asc' else 'asc') }}">Date Checked Out {% if sort_by == 'checked_out_date' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
-            <th><a href="{{ url_for('master_control', search=search, sort_by='due_date', sort_dir='desc' if sort_by == 'due_date' and sort_dir == 'asc' else 'asc') }}">Return Date {% if sort_by == 'due_date' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</a></th>
+            <th><a href="#" class="sort-link" data-sort="equipment_id">Equipment ID <span class="sort-indicator"></span></a></th>
+            <th><a href="#" class="sort-link" data-sort="item_name">Equipment Name <span class="sort-indicator"></span></a></th>
+            <th><a href="#" class="sort-link" data-sort="customer_name">Customer Name <span class="sort-indicator"></span></a></th>
+            <th><a href="#" class="sort-link" data-sort="customer_phone">Customer Phone # <span class="sort-indicator"></span></a></th>
+            <th><a href="#" class="sort-link" data-sort="checked_out_date">Date Checked Out <span class="sort-indicator"></span></a></th>
+            <th><a href="#" class="sort-link" data-sort="due_date">Return Date <span class="sort-indicator"></span></a></th>
             <th>Action</th>
         </tr>
     </thead>
     <tbody>
         {% for item in rows %}
-        <tr>
+        <tr class="master-row" data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }}" data-equipment-id="{{ item.equipment_id }}" data-item-name="{{ item.item_name }}" data-customer-name="{{ item.customer_name|default('') }}" data-customer-phone="{{ item.customer_phone|default('') }}" data-checked-out-date="{{ item.checked_out_date|default('') }}" data-due-date="{{ item.due_date|default('') }}">
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="item_name">{{ item.item_name }}</td>
             <td {% if item.customer_name %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="name"{% endif %}>{{ item.customer_name or '' }}</td>
@@ -135,5 +135,82 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('search');
+    const rows = document.querySelectorAll('.master-row');
+    const sortLinks = document.querySelectorAll('.sort-link');
+    
+    let currentSort = 'equipment_id';
+    let sortDirection = 'asc';
+    
+    function applyFiltersAndSort() {
+        const query = searchInput.value.toLowerCase().trim();
+        
+        // Filter rows
+        const filteredRows = Array.from(rows).filter(row => {
+            const searchText = row.getAttribute('data-search-text');
+            return !query || searchText.includes(query);
+        });
+        
+        // Sort rows
+        filteredRows.sort((a, b) => {
+            let aVal = a.getAttribute('data-' + currentSort) || '';
+            let bVal = b.getAttribute('data-' + currentSort) || '';
+            
+            if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        // Update visibility and reorder
+        const tbody = document.querySelector('#masterTable tbody');
+        
+        filteredRows.forEach(row => {
+            row.style.display = '';
+            tbody.appendChild(row);
+        });
+        
+        rows.forEach(row => {
+            if (!filteredRows.includes(row)) {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Update sort indicators
+        sortLinks.forEach(link => {
+            const indicator = link.querySelector('.sort-indicator');
+            if (link.getAttribute('data-sort') === currentSort) {
+                indicator.textContent = sortDirection === 'asc' ? '▲' : '▼';
+            } else {
+                indicator.textContent = '';
+            }
+        });
+        
+        // Show message if no results
+        const visibleCount = filteredRows.length;
+        if (visibleCount === 0) {
+            document.getElementById('tableContainer').innerHTML = '<p>No equipment matches your search.</p>';
+        }
+    }
+    
+    searchInput.addEventListener('input', applyFiltersAndSort);
+    
+    sortLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const newSort = this.getAttribute('data-sort');
+            if (newSort === currentSort) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort = newSort;
+                sortDirection = 'asc';
+            }
+            applyFiltersAndSort();
+        });
+    });
+});
+</script>
 {% endblock %}

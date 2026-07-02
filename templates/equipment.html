@@ -5,19 +5,19 @@
 {% block content %}
 <h1>Equipment</h1>
 
-<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+<form id="searchForm" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px;">
         <label for="search">Search equipment</label>
-        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment ID, item, or customer">
+        <input id="search" type="search" placeholder="Equipment ID, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
     </div>
-    <button type="submit" class="btn">Search</button>
     <a href="{{ url_for('equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
 
 <a href="{{ url_for('add_equipment') }}" class="btn">Add New Equipment</a>
 
+<div id="tableContainer">
 {% if equipment %}
-<table>
+<table id="equipmentTable">
     <thead>
         <tr>
             <th>Equipment ID</th>
@@ -29,7 +29,7 @@
     </thead>
     <tbody>
         {% for item in equipment %}
-        <tr>
+        <tr class="equipment-row" data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }}">
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="item_name">{{ item.item_name }}</td>
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="date_verified">{{ item.date_verified or '' }}</td>
@@ -46,4 +46,34 @@
 {% else %}
 <p>No equipment registered yet.</p>
 {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('search');
+    const rows = document.querySelectorAll('.equipment-row');
+    
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const searchText = row.getAttribute('data-search-text');
+            if (!query || searchText.includes(query)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        const table = document.getElementById('equipmentTable');
+        if (table && visibleCount === 0) {
+            document.getElementById('tableContainer').innerHTML = '<p>No equipment matches your search.</p>';
+        } else if (table && query) {
+            document.getElementById('tableContainer').innerHTML = table.outerHTML;
+        }
+    });
+});
+</script>
 {% endblock %}

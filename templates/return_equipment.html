@@ -5,35 +5,35 @@
 {% block content %}
 <h1>Return Equipment</h1>
 
-<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+<form id="filterForm" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px;">
         <label for="search">Search checked-out items</label>
-        <input id="search" name="search" type="search" value="{{ search or '' }}" placeholder="Equipment, item, or customer">
+        <input id="search" type="search" placeholder="Equipment, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
     </div>
     <div class="form-group" style="min-width: 150px;">
         <label for="sort_by">Sort By</label>
         <select id="sort_by" name="sort_by">
-            <option value="due_date" {% if sort_by == 'due_date' %}selected{% endif %}>Due Date</option>
-            <option value="equipment_id" {% if sort_by == 'equipment_id' %}selected{% endif %}>Equipment ID</option>
-            <option value="item_name" {% if sort_by == 'item_name' %}selected{% endif %}>Item Name</option>
-            <option value="customer_name" {% if sort_by == 'customer_name' %}selected{% endif %}>Customer Name</option>
-            <option value="checked_out_date" {% if sort_by == 'checked_out_date' %}selected{% endif %}>Checked Out Date</option>
-            <option value="customer_zip" {% if sort_by == 'customer_zip' %}selected{% endif %}>Customer Zip</option>
+            <option value="due_date">Due Date</option>
+            <option value="equipment_id">Equipment ID</option>
+            <option value="item_name">Item Name</option>
+            <option value="customer_name">Customer Name</option>
+            <option value="checked_out_date">Checked Out Date</option>
+            <option value="customer_zip">Customer Zip</option>
         </select>
     </div>
     <div class="form-group" style="min-width: 100px;">
         <label for="sort_dir">Order</label>
         <select id="sort_dir" name="sort_dir">
-            <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
-            <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
         </select>
     </div>
-    <button type="submit" class="btn">Search</button>
     <a href="{{ url_for('return_equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
 </form>
 
+<div id="tableContainer">
 {% if checked_out %}
-<table>
+<table id="returnTable">
     <thead>
         <tr>
             <th>Equipment ID</th>
@@ -48,7 +48,7 @@
     </thead>
     <tbody>
         {% for item in checked_out %}
-        <tr>
+        <tr class="return-row" data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.name|lower }} {{ item.zip_code|lower }}" data-due-date="{{ item.due_date }}" data-equipment-id="{{ item.equipment_id }}" data-item-name="{{ item.item_name }}" data-customer-name="{{ item.name }}" data-checked-out-date="{{ item.checked_out_date }}">
             <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="item_name">{{ item.item_name }}</td>
             <td>{{ item.name }}</td>
@@ -75,4 +75,89 @@
 {% else %}
 <p>No equipment is currently checked out.</p>
 {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('search');
+    const sortBySelect = document.getElementById('sort_by');
+    const sortDirSelect = document.getElementById('sort_dir');
+    const rows = document.querySelectorAll('.return-row');
+    
+    function applyFiltersAndSort() {
+        const query = searchInput.value.toLowerCase().trim();
+        const sortBy = sortBySelect.value;
+        const sortDir = sortDirSelect.value;
+        
+        // Filter rows
+        const filteredRows = Array.from(rows).filter(row => {
+            const searchText = row.getAttribute('data-search-text');
+            return !query || searchText.includes(query);
+        });
+        
+        // Sort rows
+        filteredRows.sort((a, b) => {
+            let aVal, bVal;
+            switch(sortBy) {
+                case 'due_date':
+                    aVal = a.getAttribute('data-due-date');
+                    bVal = b.getAttribute('data-due-date');
+                    break;
+                case 'equipment_id':
+                    aVal = a.getAttribute('data-equipment-id');
+                    bVal = b.getAttribute('data-equipment-id');
+                    break;
+                case 'item_name':
+                    aVal = a.getAttribute('data-item-name');
+                    bVal = b.getAttribute('data-item-name');
+                    break;
+                case 'customer_name':
+                    aVal = a.getAttribute('data-customer-name');
+                    bVal = b.getAttribute('data-customer-name');
+                    break;
+                case 'checked_out_date':
+                    aVal = a.getAttribute('data-checked-out-date');
+                    bVal = b.getAttribute('data-checked-out-date');
+                    break;
+                case 'customer_zip':
+                    aVal = a.querySelector('td:nth-child(6)').textContent;
+                    bVal = b.querySelector('td:nth-child(6)').textContent;
+                    break;
+                default:
+                    aVal = a.getAttribute('data-due-date');
+                    bVal = b.getAttribute('data-due-date');
+            }
+            
+            if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        // Update visibility and reorder
+        const table = document.getElementById('returnTable');
+        const tbody = table.querySelector('tbody');
+        
+        filteredRows.forEach(row => {
+            row.style.display = '';
+            tbody.appendChild(row);
+        });
+        
+        rows.forEach(row => {
+            if (!filteredRows.includes(row)) {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Show message if no results
+        const visibleCount = filteredRows.length;
+        if (visibleCount === 0) {
+            document.getElementById('tableContainer').innerHTML = '<p>No equipment matches your search.</p>';
+        }
+    }
+    
+    searchInput.addEventListener('input', applyFiltersAndSort);
+    sortBySelect.addEventListener('change', applyFiltersAndSort);
+    sortDirSelect.addEventListener('change', applyFiltersAndSort);
+});
+</script>
 {% endblock %}

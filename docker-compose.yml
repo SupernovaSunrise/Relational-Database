@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   dme-app:
     build: .
@@ -7,7 +5,24 @@ services:
       - "5000:5000"
     volumes:
       - ./database.db:/app/database.db
+      - ./backups:/app/backups
     environment:
       - FLASK_ENV=production
     restart: unless-stopped
     container_name: dme-checkout-app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    develop:
+      watch:
+        - action: sync
+          path: ./web_app.py
+          target: /app/web_app.py
+        - action: sync
+          path: ./templates
+          target: /app/templates
+        - action: rebuild
+          path: ./requirements.txt

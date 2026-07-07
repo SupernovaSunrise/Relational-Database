@@ -1,18 +1,16 @@
 {% extends "base.html" %}
-
 {% block title %}Return Equipment - Equipment Checkout Database{% endblock %}
-
 {% block content %}
 <h1>Return Equipment</h1>
 
-<form id="filterForm" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
-    <div class="form-group" style="flex: 1; min-width: 220px;">
+<div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
         <label for="search">Search checked-out items</label>
-        <input id="search" type="search" placeholder="Equipment, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        <input id="search" type="search" placeholder="Equipment, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
     <div class="form-group" style="min-width: 150px;">
         <label for="sort_by">Sort By</label>
-        <select id="sort_by" name="sort_by">
+        <select id="sort_by">
             <option value="due_date">Due Date</option>
             <option value="equipment_id">Equipment ID</option>
             <option value="item_name">Item Name</option>
@@ -23,13 +21,12 @@
     </div>
     <div class="form-group" style="min-width: 100px;">
         <label for="sort_dir">Order</label>
-        <select id="sort_dir" name="sort_dir">
+        <select id="sort_dir">
             <option value="asc">Ascending</option>
             <option value="desc">Descending</option>
         </select>
     </div>
-    <a href="{{ url_for('return_equipment') }}" class="btn" style="background-color: #6c757d;">Clear</a>
-</form>
+</div>
 
 {% if checked_out %}
 <table id="returnTable">
@@ -47,7 +44,14 @@
     </thead>
     <tbody>
         {% for item in checked_out %}
-        <tr class="return-row" data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.name|lower }} {{ item.zip_code|lower }}" data-due-date="{{ item.due_date }}" data-equipment-id="{{ item.equipment_id }}" data-item-name="{{ item.item_name }}" data-customer-name="{{ item.name }}" data-checked-out-date="{{ item.checked_out_date }}" data-customer-zip="{{ item.zip_code }}">
+        <tr class="return-row"
+            data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.name|lower }} {{ item.zip_code|lower }}"
+            data-due-date="{{ item.due_date }}"
+            data-equipment-id="{{ item.equipment_id }}"
+            data-item-name="{{ item.item_name }}"
+            data-customer-name="{{ item.name }}"
+            data-checked-out-date="{{ item.checked_out_date }}"
+            data-customer-zip="{{ item.zip_code }}">
             <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="loans" data-row-id="{{ item.id }}" data-field="item_name">{{ item.item_name }}</td>
             <td>{{ item.name }}</td>
@@ -77,52 +81,30 @@
 {% endif %}
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('search');
-    const sortBySelect = document.getElementById('sort_by');
-    const sortDirSelect = document.getElementById('sort_dir');
-    const rows = Array.from(document.querySelectorAll('.return-row'));
-    const noResultsMsg = document.getElementById('noResults');
-    const tbody = document.querySelector('#returnTable tbody');
-    
-    function applyFiltersAndSort() {
-        const query = searchInput.value.toLowerCase().trim();
-        const sortBy = sortBySelect.value;
-        const sortDir = sortDirSelect.value;
-        
-        // Filter rows
-        const filteredRows = rows.filter(row => {
-            const searchText = row.getAttribute('data-search-text');
-            return !query || searchText.includes(query);
+// Wire up live search
+initTableSearch({ inputId: 'search', rowSelector: '.return-row', noResultsId: 'noResults' });
+
+// Sort controls (separate from search — only runs on select change)
+(function () {
+    var sortBy  = document.getElementById('sort_by');
+    var sortDir = document.getElementById('sort_dir');
+    var tbody   = document.querySelector('#returnTable tbody');
+    if (!sortBy || !tbody) return;
+
+    function applySort() {
+        var key = sortBy.value;
+        var dir = sortDir.value === 'desc' ? -1 : 1;
+        var rows = Array.from(tbody.querySelectorAll('.return-row'));
+        rows.sort(function (a, b) {
+            var aVal = (a.getAttribute('data-' + key) || '').toLowerCase();
+            var bVal = (b.getAttribute('data-' + key) || '').toLowerCase();
+            return aVal < bVal ? -dir : aVal > bVal ? dir : 0;
         });
-        
-        // Sort rows
-        filteredRows.sort((a, b) => {
-            let aVal = a.getAttribute('data-' + sortBy) || '';
-            let bVal = b.getAttribute('data-' + sortBy) || '';
-            
-            if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
-            if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
-            return 0;
-        });
-        
-        // Update visibility and reorder
-        rows.forEach(row => {
-            row.style.display = filteredRows.includes(row) ? '' : 'none';
-        });
-        
-        filteredRows.forEach(row => {
-            tbody.appendChild(row);
-        });
-        
-        // Show message if no results
-        const visibleCount = filteredRows.length;
-        noResultsMsg.style.display = visibleCount === 0 && query ? 'block' : 'none';
+        rows.forEach(function (r) { tbody.appendChild(r); });
     }
-    
-    searchInput.addEventListener('input', applyFiltersAndSort);
-    sortBySelect.addEventListener('change', applyFiltersAndSort);
-    sortDirSelect.addEventListener('change', applyFiltersAndSort);
-});
+
+    sortBy.addEventListener('change', applySort);
+    sortDir.addEventListener('change', applySort);
+})();
 </script>
 {% endblock %}

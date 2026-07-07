@@ -134,94 +134,121 @@
         {% block content %}{% endblock %}
     </div>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const CHECKOUT_PERIOD_DAYS = 120;
+    // ─── Shared utilities ────────────────────────────────────────────────────
 
-            function saveCell(cell, rowId, field, table, newValue, originalValue) {
-                const payload = {
-                    table: table,
-                    row_id: rowId,
-                    field: field,
-                    value: newValue,
-                };
-                fetch('/inline_update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                })
-                .then(function(response) {
-                    return response.json().then(function(data) {
-                        if (!response.ok || data.error) {
-                            throw new Error(data.error || 'Update failed.');
+    function normalizePhone(value) {
+        return (value || '').toString().replace(/\D/g, '');
+    }
+
+    function formatPhone(value) {
+        var digits = normalizePhone(value);
+        if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+        if (digits.length !== 10) return value;
+        return '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
+    }
+
+    // Auto-format any input with data-phone="true" on blur
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('input[data-phone]').forEach(function (el) {
+            el.addEventListener('blur', function () { this.value = formatPhone(this.value); });
+        });
+    });
+
+    // ─── Live table search ───────────────────────────────────────────────────
+    // Call initTableSearch({ inputId, rowSelector, noResultsId }) to wire up
+    // instant client-side filtering with zero DOM reconstruction.
+
+    function initTableSearch(opts) {
+        var input      = document.getElementById(opts.inputId);
+        var noResults  = document.getElementById(opts.noResultsId);
+        if (!input) return;
+
+        // Pre-cache search text for every row so we never touch the DOM during filtering.
+        var rows = Array.from(document.querySelectorAll(opts.rowSelector)).map(function (row) {
+            return { el: row, text: (row.getAttribute('data-search-text') || '').toLowerCase() };
+        });
+
+        var rafPending = false;
+        var lastQuery  = '';
+
+        function applyFilter() {
+            rafPending = false;
+            var query = input.value.toLowerCase().trim();
+            if (query === lastQuery) return;
+            lastQuery = query;
+
+            var visible = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var matches = !query || rows[i].text.indexOf(query) !== -1;
+                rows[i].el.style.display = matches ? '' : 'none';
+                if (matches) visible++;
+            }
+            if (noResults) noResults.style.display = (visible === 0 && query) ? 'block' : 'none';
+        }
+
+        input.addEventListener('input', function () {
+            if (!rafPending) {
+                rafPending = true;
+                requestAnimationFrame(applyFilter);
+            }
+        });
+    }
+
+    // ─── Inline cell editing ─────────────────────────────────────────────────
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const CHECKOUT_PERIOD_DAYS = 120;
+
+        function saveCell(cell, rowId, field, table, newValue, originalValue) {
+            fetch('/inline_update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: table, row_id: rowId, field: field, value: newValue })
+            })
+            .then(function(response) {
+                return response.json().then(function(data) {
+                    if (!response.ok || data.error) throw new Error(data.error || 'Update failed.');
+                    cell.dataset.originalValue = newValue;
+                    if (field === 'equipment_id') {
+                        var row = cell.closest('tr');
+                        if (row) {
+                            row.querySelectorAll('[data-table="equipment"]').forEach(function(s) { s.dataset.rowId = newValue; });
+                            row.querySelectorAll('[data-table="loans"][data-field="equipment_id"]').forEach(function(s) { s.dataset.rowId = newValue; });
                         }
-                        cell.dataset.originalValue = newValue;
-                        // If we just saved a new equipment_id, update all sibling
-                        // cells in this row that reference the old ID so future
-                        // edits use the correct row_id.
-                        if (field === 'equipment_id') {
-                            const row = cell.closest('tr');
+                    }
+                    if (field === 'checked_out_date') {
+                        var d = new Date(newValue);
+                        if (!isNaN(d.getTime())) {
+                            d.setDate(d.getDate() + CHECKOUT_PERIOD_DAYS);
+                            var newDueDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+                            var row = cell.closest('tr');
                             if (row) {
-                                row.querySelectorAll('[data-table="equipment"]').forEach(function(sibling) {
-                                    sibling.dataset.rowId = newValue;
-                                });
-                                row.querySelectorAll('[data-table="loans"][data-field="equipment_id"]').forEach(function(sibling) {
-                                    sibling.dataset.rowId = newValue;
-                                });
-                            }
-                        }
-                        // If checked_out_date changed, auto-update due_date cell
-                        if (field === 'checked_out_date') {
-                            var d = new Date(newValue);
-                            if (!isNaN(d.getTime())) {
-                                d.setDate(d.getDate() + CHECKOUT_PERIOD_DAYS);
-                                var yyyy = d.getFullYear();
-                                var mm = String(d.getMonth() + 1).padStart(2, '0');
-                                var dd = String(d.getDate()).padStart(2, '0');
-                                var newDueDate = yyyy + '-' + mm + '-' + dd;
-                                var row = cell.closest('tr');
-                                if (row) {
-                                    var dueDateCell = row.querySelector('[data-field="due_date"]');
-                                    if (dueDateCell) {
-                                        dueDateCell.textContent = newDueDate;
-                                        saveCell(
-                                            dueDateCell,
-                                            dueDateCell.dataset.rowId,
-                                            'due_date',
-                                            dueDateCell.dataset.table,
-                                            newDueDate,
-                                            dueDateCell.dataset.originalValue || ''
-                                        );
-                                    }
+                                var dueDateCell = row.querySelector('[data-field="due_date"]');
+                                if (dueDateCell) {
+                                    dueDateCell.textContent = newDueDate;
+                                    saveCell(dueDateCell, dueDateCell.dataset.rowId, 'due_date', dueDateCell.dataset.table, newDueDate, dueDateCell.dataset.originalValue || '');
                                 }
                             }
                         }
-                    });
-                })
-                .catch(function(error) {
-                    alert('Update failed: ' + error.message);
-                    cell.textContent = originalValue;
-                });
-            }
-
-            const editableCells = document.querySelectorAll('td[contenteditable="true"][data-table][data-row-id][data-field]');
-            editableCells.forEach(function(cell) {
-                cell.addEventListener('focus', function() {
-                    cell.dataset.originalValue = cell.textContent.trim();
-                });
-                cell.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        cell.blur();
                     }
                 });
-                cell.addEventListener('blur', function() {
-                    const originalValue = cell.dataset.originalValue || '';
-                    const newValue = cell.textContent.trim();
-                    if (newValue === originalValue) return;
-                    saveCell(cell, cell.dataset.rowId, cell.dataset.field, cell.dataset.table, newValue, originalValue);
-                });
+            })
+            .catch(function(error) {
+                alert('Update failed: ' + error.message);
+                cell.textContent = originalValue;
+            });
+        }
+
+        document.querySelectorAll('td[contenteditable="true"][data-table][data-row-id][data-field]').forEach(function(cell) {
+            cell.addEventListener('focus', function() { cell.dataset.originalValue = cell.textContent.trim(); });
+            cell.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); cell.blur(); } });
+            cell.addEventListener('blur', function() {
+                var originalValue = cell.dataset.originalValue || '';
+                var newValue = cell.textContent.trim();
+                if (newValue !== originalValue) saveCell(cell, cell.dataset.rowId, cell.dataset.field, cell.dataset.table, newValue, originalValue);
             });
         });
+    });
     </script>
 </body>
 </html>

@@ -49,6 +49,10 @@
     <p><strong>Zip:</strong> {{ customer['zip_code'] }}</p>
     {% endif %}
 
+    <p class="no-print">
+      <strong>Agreement Date:</strong>
+      <input class="customer-info-field" type="text" id="agreement_date" name="agreement_date" value="{{ agreement_date or '' }}" placeholder="YYYY-MM-DD" autocomplete="off">
+    </p>
     {% if due_date %}
       <p><strong>Return By:</strong> {{ due_date }} ({{ checkout_period_days }} days)</p>
     {% endif %}
@@ -267,6 +271,41 @@ canvas.addEventListener('touchcancel', pointerUp);
 canvas.addEventListener('touchmove', pointerMove);
 function clearSig(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
 // Phone formatting handled by base.html (data-phone attribute)
+document.addEventListener('DOMContentLoaded', function () {
+  const agreementDateInput = document.getElementById('agreement_date');
+  if (agreementDateInput) {
+    agreementDateInput.addEventListener('blur', formatAgreementDateInput);
+    formatAgreementDateInput();
+  }
+});
+
+function formatAgreementDateInput() {
+  const input = document.getElementById('agreement_date');
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    input.value = yyyy + '-' + mm + '-' + dd;
+    return;
+  }
+  const isoMatch = value.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (isoMatch) {
+    input.value = value;
+    return;
+  }
+  const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, month, day, year] = slashMatch;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    if (!Number.isNaN(date.getTime())) {
+      input.value = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    }
+  }
+}
+
 function prepareSignature(){
   let data = canvas.toDataURL('image/png');
   document.getElementById('signature_data').value = data;

@@ -49,6 +49,23 @@ def format_phone(phone):
     return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
 
 
+def normalize_date_input(value):
+    if value is None:
+        return ''
+    text = str(value).strip()
+    if not text:
+        return ''
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return text
+    if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", text):
+        month, day, year = [int(part) for part in text.split('/')]
+        return datetime(year, month, day).date().isoformat()
+    if re.fullmatch(r"\d{4}/\d{2}/\d{2}", text):
+        year, month, day = [int(part) for part in text.split('/')]
+        return datetime(year, month, day).date().isoformat()
+    return text
+
+
 def customer_phone_exists(phone_digits, cursor, exclude_id=None):
     if not phone_digits:
         return False
@@ -1083,6 +1100,7 @@ def customer_agreement(customer_id):
     loan_id = request.args.get('loan_id')
     loans = []
     due_date = None
+    agreement_date = request.form.get('agreement_date', '') if request.method == 'POST' else ''
     if loan_ids_csv:
         loan_ids = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
         if loan_ids:
@@ -1090,7 +1108,7 @@ def customer_agreement(customer_id):
             cursor = conn.cursor()
             placeholders = ",".join("?" for _ in loan_ids)
             cursor.execute(
-                f"SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date FROM loans "
+                f"SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date, loans.agreement_date FROM loans "
                 f"LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
                 f"WHERE loans.id IN ({placeholders})",
                 loan_ids,
@@ -1099,11 +1117,13 @@ def customer_agreement(customer_id):
             conn.close()
             if loans:
                 due_date = loans[0]['due_date']
+                if not agreement_date and loans[0]['agreement_date']:
+                    agreement_date = loans[0]['agreement_date']
     elif loan_id:
         conn = connect_db()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date FROM loans "
+            "SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date, loans.agreement_date FROM loans "
             "LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
             "WHERE loans.id = ?",
             (loan_id,)
@@ -1113,6 +1133,8 @@ def customer_agreement(customer_id):
         if loan_row:
             loans = [loan_row]
             due_date = loan_row['due_date']
+            if not agreement_date and loan_row['agreement_date']:
+                agreement_date = loan_row['agreement_date']
 
     if request.method == 'POST':
         action = request.form.get('action', 'save')
@@ -1243,6 +1265,7 @@ def customer_agreement(customer_id):
             waiver_agreed = 'waiver_agreed' in request.form
             signature_agreed = 'signature_agreed' in request.form
             signature_data = request.form.get('signature_data', '')
+            agreement_date = normalize_date_input(request.form.get('agreement_date', '')) or datetime.today().date().isoformat()
 
             if not waiver_agreed or not signature_agreed:
                 flash('You must agree to both the waiver and digital signature acknowledgement.')
@@ -1260,13 +1283,13 @@ def customer_agreement(customer_id):
                 for lid in loan_ids:
                     cursor.execute(
                         "UPDATE loans SET agreement_data = ?, agreement_date = ? WHERE id = ?",
-                        (signature_data, datetime.today().date().isoformat(), lid),
+                        (signature_data, agreement_date, lid),
                     )
                     updated_loans.append(lid)
             elif loan_id:
                 cursor.execute(
                     "UPDATE loans SET agreement_data = ?, agreement_date = ? WHERE id = ?",
-                    (signature_data, datetime.today().date().isoformat(), loan_id),
+                    (signature_data, agreement_date, loan_id),
                 )
                 updated_loans.append(int(loan_id))
 
@@ -1280,6 +1303,9 @@ def customer_agreement(customer_id):
             flash('Customer agreement recorded successfully.')
             return redirect(url_for('master_control'))
 
+    if not agreement_date:
+        agreement_date = datetime.today().date().isoformat()
+
     return render_template(
         'customer_agreement.html',
         customer=customer,
@@ -1290,6 +1316,7 @@ def customer_agreement(customer_id):
         loans=loans,
         search_api_key=SEARCH_API_KEY or '',
         new_customer=new_customer,
+        agreement_date=agreement_date,
     )
 
 

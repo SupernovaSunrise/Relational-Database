@@ -1129,9 +1129,9 @@ def customer_agreement(customer_id):
             conn.close()
             if loans:
                 due_date = loans[0]['due_date']
-                if not checkout_date and loans[0]['checked_out_date']:
+                if not checkout_date and 'checked_out_date' in dict(loans[0]):
                     checkout_date = loans[0]['checked_out_date']
-                if not agreement_date and loans[0]['agreement_date']:
+                if not agreement_date and 'agreement_date' in dict(loans[0]):
                     agreement_date = loans[0]['agreement_date']
     elif loan_id:
         conn = connect_db()
@@ -1147,9 +1147,9 @@ def customer_agreement(customer_id):
         if loan_row:
             loans = [loan_row]
             due_date = loan_row['due_date']
-            if not checkout_date and loan_row['checked_out_date']:
+            if not checkout_date and 'checked_out_date' in dict(loan_row):
                 checkout_date = loan_row['checked_out_date']
-            if not agreement_date and loan_row['agreement_date']:
+            if not agreement_date and 'agreement_date' in dict(loan_row):
                 agreement_date = loan_row['agreement_date']
 
     if request.method == 'POST':

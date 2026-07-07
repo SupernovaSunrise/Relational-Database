@@ -53,10 +53,6 @@
       <strong>Checkout Date:</strong>
       <input class="customer-info-field" type="text" id="checkout_date" name="checkout_date" value="{{ checkout_date or '' }}" placeholder="YYYY-MM-DD" autocomplete="off">
     </p>
-    <p class="no-print">
-      <strong>Agreement Date:</strong>
-      <input class="customer-info-field" type="text" id="agreement_date" name="agreement_date" value="{{ agreement_date or '' }}" placeholder="YYYY-MM-DD" autocomplete="off">
-    </p>
     {% if due_date %}
       <p><strong>Return By:</strong> <span id="return_by_display">{{ due_date }} ({{ checkout_period_days }} days)</span></p>
     {% endif %}
@@ -276,12 +272,6 @@ canvas.addEventListener('touchmove', pointerMove);
 function clearSig(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
 // Phone formatting handled by base.html (data-phone attribute)
 document.addEventListener('DOMContentLoaded', function () {
-  const agreementDateInput = document.getElementById('agreement_date');
-  if (agreementDateInput) {
-    agreementDateInput.addEventListener('blur', formatAgreementDateInput);
-    formatAgreementDateInput();
-  }
-
   const checkoutDateInput = document.getElementById('checkout_date');
   const returnByDisplay = document.getElementById('return_by_display');
   if (checkoutDateInput) {
@@ -335,9 +325,21 @@ function updateReturnByDate() {
   const checkoutInput = document.getElementById('checkout_date');
   const display = document.getElementById('return_by_display');
   if (!checkoutInput || !display) return;
+  const rawValue = checkoutInput.value.trim();
+  if (!rawValue) {
+    display.textContent = '';
+    return;
+  }
   const normalized = formatDateInput(checkoutInput);
-  if (!normalized) return;
+  if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    display.textContent = '';
+    return;
+  }
   const checkoutDate = new Date(normalized + 'T00:00:00');
+  if (Number.isNaN(checkoutDate.getTime())) {
+    display.textContent = '';
+    return;
+  }
   const days = Number(display.dataset.checkoutPeriodDays || 120);
   checkoutDate.setDate(checkoutDate.getDate() + days);
   const yyyy = checkoutDate.getFullYear();

@@ -1,22 +1,19 @@
 {% extends "base.html" %}
-
 {% block title %}Customers - Equipment Checkout Database{% endblock %}
-
 {% block content %}
 <h1>Customers</h1>
 
-<form id="searchForm" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
-    <div class="form-group" style="flex: 1; min-width: 220px;">
+<div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
         <label for="search">Search customers</label>
-        <input id="search" type="search" placeholder="Name, phone, or zip" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        <input id="search" type="search" placeholder="Name, phone, or zip" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
-    <a href="{{ url_for('customers') }}" class="btn" style="background-color: #6c757d;">Clear</a>
-</form>
+</div>
 
 <a href="{{ url_for('add_customer') }}" class="btn">Add New Customer</a>
 
 {% if customers %}
-<table id="customersTable">
+<table>
     <thead>
         <tr>
             <th>ID</th>
@@ -50,24 +47,6 @@
 {% endif %}
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('search');
-    const rows = Array.from(document.querySelectorAll('.customer-row'));
-    const noResultsMsg = document.getElementById('noResults');
-    
-    searchInput.addEventListener('input', function() {
-        const query = this.value.toLowerCase().trim();
-        let visibleCount = 0;
-        
-        rows.forEach(row => {
-            const searchText = row.getAttribute('data-search-text');
-            const matches = !query || searchText.includes(query);
-            row.style.display = matches ? '' : 'none';
-            if (matches) visibleCount++;
-        });
-        
-        noResultsMsg.style.display = visibleCount === 0 && query ? 'block' : 'none';
-    });
-});
+initTableSearch({ inputId: 'search', rowSelector: '.customer-row', noResultsId: 'noResults' });
 </script>
 {% endblock %}

@@ -1,7 +1,5 @@
 {% extends "base.html" %}
-
 {% block title %}Veteran's DME{% endblock %}
-
 {% block content %}
 <h1>Veteran's DME</h1>
 <p>Manage customers, equipment, checkouts, and returns from one central page.</p>
@@ -12,13 +10,7 @@
     <p>Multiple customers match "<strong>{{ pending_customer_reference }}</strong>". Select the correct customer for the selected equipment:</p>
     <table>
         <thead>
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>ZIP</th>
-                <th>Action</th>
-            </tr>
+            <tr><th>ID</th><th>Name</th><th>Phone</th><th>ZIP</th><th>Action</th></tr>
         </thead>
         <tbody>
             {% for customer in checkout_candidates %}
@@ -55,7 +47,7 @@
             </div>
             <div class="form-group">
                 <label for="customer_phone">Phone</label>
-                <input id="customer_phone" name="phone" type="text">
+                <input id="customer_phone" name="phone" type="text" data-phone>
             </div>
             <div class="form-group">
                 <label for="customer_zip">ZIP Code</label>
@@ -82,13 +74,12 @@
     </section>
 </div>
 
-<form id="searchForm" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+<div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
         <label for="search">Search equipment or customer</label>
-        <input id="search" type="search" placeholder="Equipment ID, item name, customer, or phone" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        <input id="search" type="search" placeholder="Equipment ID, item name, customer, or phone" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
-    <a href="{{ url_for('master_control') }}" class="btn" style="background-color: #6c757d;">Clear</a>
-</form>
+</div>
 
 <table id="masterTable">
     <thead>
@@ -104,7 +95,14 @@
     </thead>
     <tbody>
         {% for item in rows %}
-        <tr class="master-row" data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }}" data-equipment-id="{{ item.equipment_id }}" data-item-name="{{ item.item_name }}" data-customer-name="{{ item.customer_name|default('') }}" data-customer-phone="{{ item.customer_phone|default('') }}" data-checked-out-date="{{ item.checked_out_date|default('') }}" data-due-date="{{ item.due_date|default('') }}">
+        <tr class="master-row"
+            data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }}"
+            data-equipment-id="{{ item.equipment_id }}"
+            data-item-name="{{ item.item_name }}"
+            data-customer-name="{{ item.customer_name|default('') }}"
+            data-customer-phone="{{ item.customer_phone|default('') }}"
+            data-checked-out-date="{{ item.checked_out_date|default('') }}"
+            data-due-date="{{ item.due_date|default('') }}">
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="equipment_id">{{ item.equipment_id }}</td>
             <td contenteditable="true" data-table="equipment" data-row-id="{{ item.equipment_id }}" data-field="item_name">{{ item.item_name }}</td>
             <td {% if item.customer_name %}contenteditable="true" data-table="customers" data-row-id="{{ item.customer_id }}" data-field="name"{% endif %}>{{ item.customer_name or '' }}</td>
@@ -113,102 +111,66 @@
             <td {% if item.loan_id %}contenteditable="true" data-table="loans" data-row-id="{{ item.loan_id }}" data-field="due_date"{% endif %}>{{ item.due_date or '' }}</td>
             <td>
                 {% if item.loan_id %}
-                {% if item.agreement_data %}
-                    <a class="btn" href="{{ url_for('agreement_view', loan_id=item.loan_id) }}">View Agreement</a>
-                {% endif %}
-                <form method="POST" style="display:inline; margin:0;">
-                    <input type="hidden" name="action" value="return">
-                    <input type="hidden" name="loan_id" value="{{ item.loan_id }}">
-                    <button type="submit" class="btn btn-danger">Return</button>
-                </form>
+                    {% if item.agreement_data %}
+                        <a class="btn" href="{{ url_for('agreement_view', loan_id=item.loan_id) }}">View Agreement</a>
+                    {% endif %}
+                    <form method="POST" style="display:inline; margin:0;">
+                        <input type="hidden" name="action" value="return">
+                        <input type="hidden" name="loan_id" value="{{ item.loan_id }}">
+                        <button type="submit" class="btn btn-danger">Return</button>
+                    </form>
                 {% else %}
-                <form method="POST" style="display:flex; gap:6px; align-items:center; margin:0;">
-                    <input type="hidden" name="action" value="checkout">
-                    <input type="hidden" name="equipment_id" value="{{ item.equipment_id }}">
-                    <input name="customer_reference" type="text" placeholder="Customer ID, Name, Phone (optional)" style="flex:1; min-width:140px; padding:6px; border:1px solid #ddd; border-radius:4px;">
-                    <button type="submit" class="btn">Checkout</button>
-                </form>
+                    <form method="POST" style="display:flex; gap:6px; align-items:center; margin:0;">
+                        <input type="hidden" name="action" value="checkout">
+                        <input type="hidden" name="equipment_id" value="{{ item.equipment_id }}">
+                        <input name="customer_reference" type="text" placeholder="Customer ID, Name, Phone (optional)" style="flex:1; min-width:140px; padding:6px; border:1px solid #ddd; border-radius:4px;">
+                        <button type="submit" class="btn">Checkout</button>
+                    </form>
                 {% endif %}
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-
 <p id="noResults" style="display:none; margin-top:20px;">No equipment matches your search.</p>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('search');
-    const sortLinks = document.querySelectorAll('.sort-link');
-    const rows = Array.from(document.querySelectorAll('.master-row'));
-    const tbody = document.querySelector('#masterTable tbody');
-    const noResultsMsg = document.getElementById('noResults');
-    
-    let currentSort = 'equipment_id';
-    let sortDirection = 'asc';
-    
-    function applyFiltersAndSort() {
-        const query = searchInput.value.toLowerCase().trim();
-        
-        // Filter rows
-        const filteredRows = rows.filter(row => {
-            const searchText = row.getAttribute('data-search-text');
-            return !query || searchText.includes(query);
+// Live search
+initTableSearch({ inputId: 'search', rowSelector: '.master-row', noResultsId: 'noResults' });
+
+// Column sort
+(function () {
+    var tbody     = document.querySelector('#masterTable tbody');
+    var sortLinks = document.querySelectorAll('.sort-link');
+    var currentSort = 'equipment_id';
+    var sortDir     = 'asc';
+
+    function applySort() {
+        var dir  = sortDir === 'asc' ? 1 : -1;
+        var rows = Array.from(tbody.querySelectorAll('.master-row'));
+        rows.sort(function (a, b) {
+            var aVal = (a.getAttribute('data-' + currentSort) || '').toLowerCase();
+            var bVal = (b.getAttribute('data-' + currentSort) || '').toLowerCase();
+            return aVal < bVal ? -dir : aVal > bVal ? dir : 0;
         });
-        
-        // Sort rows
-        filteredRows.sort((a, b) => {
-            let aVal = a.getAttribute('data-' + currentSort) || '';
-            let bVal = b.getAttribute('data-' + currentSort) || '';
-            
-            if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-            if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-            return 0;
+        rows.forEach(function (r) { tbody.appendChild(r); });
+        sortLinks.forEach(function (link) {
+            var ind = link.querySelector('.sort-indicator');
+            ind.textContent = link.getAttribute('data-sort') === currentSort ? (sortDir === 'asc' ? '▲' : '▼') : '';
         });
-        
-        // Update visibility and reorder
-        rows.forEach(row => {
-            row.style.display = filteredRows.includes(row) ? '' : 'none';
-        });
-        
-        filteredRows.forEach(row => {
-            tbody.appendChild(row);
-        });
-        
-        // Update sort indicators
-        sortLinks.forEach(link => {
-            const indicator = link.querySelector('.sort-indicator');
-            if (link.getAttribute('data-sort') === currentSort) {
-                indicator.textContent = sortDirection === 'asc' ? '▲' : '▼';
-            } else {
-                indicator.textContent = '';
-            }
-        });
-        
-        // Show message if no results
-        const visibleCount = filteredRows.length;
-        noResultsMsg.style.display = visibleCount === 0 && query ? 'block' : 'none';
     }
-    
-    searchInput.addEventListener('input', applyFiltersAndSort);
-    
-    sortLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
+
+    sortLinks.forEach(function (link) {
+        link.addEventListener('click', function (e) {
             e.preventDefault();
-            const newSort = this.getAttribute('data-sort');
-            if (newSort === currentSort) {
-                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort = newSort;
-                sortDirection = 'asc';
-            }
-            applyFiltersAndSort();
+            var col = this.getAttribute('data-sort');
+            sortDir = (col === currentSort && sortDir === 'asc') ? 'desc' : 'asc';
+            currentSort = col;
+            applySort();
         });
     });
-    
-    // Initial sort
-    applyFiltersAndSort();
-});
+
+    applySort();
+})();
 </script>
 {% endblock %}

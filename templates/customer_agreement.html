@@ -38,7 +38,7 @@
     </p>
     <p>
       <strong>Phone:</strong>
-      <input class="customer-info-field" type="text" id="new_phone" placeholder="Phone (optional)" value="{{ customer['phone'] or '' }}">
+      <input class="customer-info-field" type="text" id="new_phone" data-phone placeholder="Phone (optional)" value="{{ customer['phone'] or '' }}">
     </p>
     <p>
       <strong>ZIP:</strong>
@@ -266,26 +266,7 @@ canvas.addEventListener('touchend', pointerUp);
 canvas.addEventListener('touchcancel', pointerUp);
 canvas.addEventListener('touchmove', pointerMove);
 function clearSig(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
-function normalizePhoneInput(value) {
-  return (value || '').toString().replace(/\D/g, '');
-}
-function formatPhoneInput(value) {
-  var digits = normalizePhoneInput(value);
-  if (digits.length === 11 && digits.startsWith('1')) {
-    digits = digits.slice(1);
-  }
-  if (digits.length !== 10) {
-    return value;
-  }
-  return '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
-}
-var newPhoneInput = document.getElementById('new_phone');
-if (newPhoneInput) {
-  newPhoneInput.addEventListener('blur', function() {
-    this.value = formatPhoneInput(this.value);
-  });
-}
-
+// Phone formatting handled by base.html (data-phone attribute)
 function prepareSignature(){
   let data = canvas.toDataURL('image/png');
   document.getElementById('signature_data').value = data;

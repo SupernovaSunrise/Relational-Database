@@ -66,6 +66,17 @@ def normalize_date_input(value):
     return text
 
 
+def calculate_due_date(checkout_date, checkout_period_days=CHECKOUT_PERIOD_DAYS):
+    normalized = normalize_date_input(checkout_date)
+    if not normalized:
+        return ''
+    try:
+        parsed = datetime.strptime(normalized, "%Y-%m-%d").date()
+    except ValueError:
+        return ''
+    return (parsed + timedelta(days=checkout_period_days)).isoformat()
+
+
 def customer_phone_exists(phone_digits, cursor, exclude_id=None):
     if not phone_digits:
         return False
@@ -1100,6 +1111,7 @@ def customer_agreement(customer_id):
     loan_id = request.args.get('loan_id')
     loans = []
     due_date = None
+    checkout_date = request.form.get('checkout_date', '') if request.method == 'POST' else ''
     agreement_date = request.form.get('agreement_date', '') if request.method == 'POST' else ''
     if loan_ids_csv:
         loan_ids = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
@@ -1117,6 +1129,8 @@ def customer_agreement(customer_id):
             conn.close()
             if loans:
                 due_date = loans[0]['due_date']
+                if not checkout_date and loans[0]['checked_out_date']:
+                    checkout_date = loans[0]['checked_out_date']
                 if not agreement_date and loans[0]['agreement_date']:
                     agreement_date = loans[0]['agreement_date']
     elif loan_id:
@@ -1133,6 +1147,8 @@ def customer_agreement(customer_id):
         if loan_row:
             loans = [loan_row]
             due_date = loan_row['due_date']
+            if not checkout_date and loan_row['checked_out_date']:
+                checkout_date = loan_row['checked_out_date']
             if not agreement_date and loan_row['agreement_date']:
                 agreement_date = loan_row['agreement_date']
 
@@ -1265,6 +1281,8 @@ def customer_agreement(customer_id):
             waiver_agreed = 'waiver_agreed' in request.form
             signature_agreed = 'signature_agreed' in request.form
             signature_data = request.form.get('signature_data', '')
+            checkout_date = normalize_date_input(request.form.get('checkout_date', '')) or datetime.today().date().isoformat()
+            due_date = calculate_due_date(checkout_date, CHECKOUT_PERIOD_DAYS) or datetime.today().date().isoformat()
             agreement_date = normalize_date_input(request.form.get('agreement_date', '')) or datetime.today().date().isoformat()
 
             if not waiver_agreed or not signature_agreed:
@@ -1282,14 +1300,14 @@ def customer_agreement(customer_id):
                 loan_ids = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
                 for lid in loan_ids:
                     cursor.execute(
-                        "UPDATE loans SET agreement_data = ?, agreement_date = ? WHERE id = ?",
-                        (signature_data, agreement_date, lid),
+                        "UPDATE loans SET checked_out_date = ?, due_date = ?, agreement_data = ?, agreement_date = ? WHERE id = ?",
+                        (checkout_date, due_date, signature_data, agreement_date, lid),
                     )
                     updated_loans.append(lid)
             elif loan_id:
                 cursor.execute(
-                    "UPDATE loans SET agreement_data = ?, agreement_date = ? WHERE id = ?",
-                    (signature_data, agreement_date, loan_id),
+                    "UPDATE loans SET checked_out_date = ?, due_date = ?, agreement_data = ?, agreement_date = ? WHERE id = ?",
+                    (checkout_date, due_date, signature_data, agreement_date, loan_id),
                 )
                 updated_loans.append(int(loan_id))
 
@@ -1303,6 +1321,10 @@ def customer_agreement(customer_id):
             flash('Customer agreement recorded successfully.')
             return redirect(url_for('master_control'))
 
+    if not checkout_date:
+        checkout_date = datetime.today().date().isoformat()
+    if not due_date:
+        due_date = calculate_due_date(checkout_date, CHECKOUT_PERIOD_DAYS)
     if not agreement_date:
         agreement_date = datetime.today().date().isoformat()
 
@@ -1317,6 +1339,7 @@ def customer_agreement(customer_id):
         search_api_key=SEARCH_API_KEY or '',
         new_customer=new_customer,
         agreement_date=agreement_date,
+        checkout_date=checkout_date,
     )
 
 

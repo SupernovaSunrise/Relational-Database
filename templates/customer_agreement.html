@@ -50,11 +50,15 @@
     {% endif %}
 
     <p class="no-print">
+      <strong>Checkout Date:</strong>
+      <input class="customer-info-field" type="text" id="checkout_date" name="checkout_date" value="{{ checkout_date or '' }}" placeholder="YYYY-MM-DD" autocomplete="off">
+    </p>
+    <p class="no-print">
       <strong>Agreement Date:</strong>
       <input class="customer-info-field" type="text" id="agreement_date" name="agreement_date" value="{{ agreement_date or '' }}" placeholder="YYYY-MM-DD" autocomplete="off">
     </p>
     {% if due_date %}
-      <p><strong>Return By:</strong> {{ due_date }} ({{ checkout_period_days }} days)</p>
+      <p><strong>Return By:</strong> <span id="return_by_display">{{ due_date }} ({{ checkout_period_days }} days)</span></p>
     {% endif %}
     {% if loans %}
       <p><strong>Equipment:</strong></p>
@@ -277,11 +281,24 @@ document.addEventListener('DOMContentLoaded', function () {
     agreementDateInput.addEventListener('blur', formatAgreementDateInput);
     formatAgreementDateInput();
   }
+
+  const checkoutDateInput = document.getElementById('checkout_date');
+  const returnByDisplay = document.getElementById('return_by_display');
+  if (checkoutDateInput) {
+    checkoutDateInput.addEventListener('blur', function () {
+      formatDateInput(checkoutDateInput);
+      updateReturnByDate();
+    });
+    checkoutDateInput.addEventListener('input', updateReturnByDate);
+    if (returnByDisplay) {
+      returnByDisplay.dataset.checkoutPeriodDays = {{ checkout_period_days }};
+    }
+    updateReturnByDate();
+  }
 });
 
-function formatAgreementDateInput() {
-  const input = document.getElementById('agreement_date');
-  if (!input) return;
+function formatDateInput(input) {
+  if (!input) return '';
   const value = input.value.trim();
   if (!value) {
     const today = new Date();
@@ -289,21 +306,44 @@ function formatAgreementDateInput() {
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     input.value = yyyy + '-' + mm + '-' + dd;
-    return;
+    return input.value;
   }
   const isoMatch = value.match(/^\d{4}-\d{2}-\d{2}$/);
   if (isoMatch) {
     input.value = value;
-    return;
+    return input.value;
   }
   const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (slashMatch) {
     const [, month, day, year] = slashMatch;
     const date = new Date(Number(year), Number(month) - 1, Number(day));
     if (!Number.isNaN(date.getTime())) {
-      input.value = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+      const normalized = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+      input.value = normalized;
+      return normalized;
     }
   }
+  return value;
+}
+
+function formatAgreementDateInput() {
+  const input = document.getElementById('agreement_date');
+  return formatDateInput(input);
+}
+
+function updateReturnByDate() {
+  const checkoutInput = document.getElementById('checkout_date');
+  const display = document.getElementById('return_by_display');
+  if (!checkoutInput || !display) return;
+  const normalized = formatDateInput(checkoutInput);
+  if (!normalized) return;
+  const checkoutDate = new Date(normalized + 'T00:00:00');
+  const days = Number(display.dataset.checkoutPeriodDays || 120);
+  checkoutDate.setDate(checkoutDate.getDate() + days);
+  const yyyy = checkoutDate.getFullYear();
+  const mm = String(checkoutDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(checkoutDate.getDate()).padStart(2, '0');
+  display.textContent = yyyy + '-' + mm + '-' + dd + ' (' + days + ' days)';
 }
 
 function prepareSignature(){

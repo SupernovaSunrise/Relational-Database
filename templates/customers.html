@@ -47,6 +47,10 @@
 {% endif %}
 
 <script>
-initTableSearch({ inputId: 'search', rowSelector: '.customer-row', noResultsId: 'noResults' });
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof initTableSearch === 'function') {
+        initTableSearch({ inputId: 'search', rowSelector: '.customer-row', noResultsId: 'noResults' });
+    }
+});
 </script>
 {% endblock %}

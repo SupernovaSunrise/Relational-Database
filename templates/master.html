@@ -136,7 +136,11 @@
 
 <script>
 // Live search
-initTableSearch({ inputId: 'search', rowSelector: '.master-row', noResultsId: 'noResults' });
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof initTableSearch === 'function') {
+        initTableSearch({ inputId: 'search', rowSelector: '.master-row', noResultsId: 'noResults' });
+    }
+});
 
 // Column sort
 (function () {

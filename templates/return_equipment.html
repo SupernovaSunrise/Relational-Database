@@ -82,7 +82,11 @@
 
 <script>
 // Wire up live search
-initTableSearch({ inputId: 'search', rowSelector: '.return-row', noResultsId: 'noResults' });
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof initTableSearch === 'function') {
+        initTableSearch({ inputId: 'search', rowSelector: '.return-row', noResultsId: 'noResults' });
+    }
+});
 
 // Sort controls (separate from search — only runs on select change)
 (function () {

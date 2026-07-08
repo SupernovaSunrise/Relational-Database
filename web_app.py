@@ -1188,10 +1188,35 @@ def customer_agreement(customer_id):
             new_item_name = request.form.get('new_item_name', '').strip()
             if not selected_equipment and not new_equipment_id:
                 flash('Please select at least one equipment item to add or provide a new equipment entry.')
-                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+                return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id, new_customer=new_customer))
 
             conn = connect_db()
             cursor = conn.cursor()
+
+            # If new_customer, save the customer data before adding equipment
+            if new_customer:
+                new_name = request.form.get('add_equipment_new_name', '').strip()
+                new_phone = request.form.get('add_equipment_new_phone', '').strip()
+                new_zip = request.form.get('add_equipment_new_zip', '').strip()
+
+                if new_name:
+                    digits = normalize_phone(new_phone) if new_phone else ''
+                    if new_phone and len(digits) < 10:
+                        conn.close()
+                        flash('Phone number must have at least 10 digits.')
+                        return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id, new_customer=1))
+                    if digits and customer_phone_exists(digits, cursor, exclude_id=customer_id):
+                        conn.close()
+                        flash('A customer with this phone number already exists.')
+                        return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id, new_customer=1))
+                    cursor.execute(
+                        "UPDATE customers SET name = ?, phone = ?, zip_code = ? WHERE id = ?",
+                        (new_name, format_phone(new_phone) if new_phone else '', new_zip if new_zip else '00000', customer_id),
+                    )
+                    conn.commit()
+                    # Customer is now saved, so clear new_customer flag
+                    new_customer = None
+
             cursor.execute("SELECT zip_code FROM customers WHERE id = ?", (customer_id,))
             cust_row = cursor.fetchone()
             customer_zip = cust_row['zip_code'] if cust_row else ''
@@ -1200,16 +1225,16 @@ def customer_agreement(customer_id):
                 if not new_item_name:
                     conn.close()
                     flash('New equipment item name is required when adding a new equipment ID.')
-                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id, new_customer=new_customer))
                 if not EQUIPMENT_ID_PATTERN.fullmatch(new_equipment_id):
                     conn.close()
                     flash('New equipment ID must be in format AA-0000.')
-                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id, new_customer=new_customer))
                 cursor.execute("SELECT equipment_id FROM equipment WHERE equipment_id = ?", (new_equipment_id,))
                 if cursor.fetchone():
                     conn.close()
                     flash(f'Equipment {new_equipment_id} already exists. Please select it from the available items.')
-                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id))
+                    return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id, new_customer=new_customer))
                 cursor.execute(
                     "INSERT INTO equipment (equipment_id, item_name) VALUES (?, ?)",
                     (new_equipment_id, new_item_name),
@@ -1251,7 +1276,10 @@ def customer_agreement(customer_id):
                     loan_ids_csv = str(new_loan_id)
             conn.commit()
             conn.close()
-            return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv))
+            redirect_params = {'customer_id': customer_id, 'loan_ids': loan_ids_csv}
+            if new_customer:
+                redirect_params['new_customer'] = new_customer
+            return redirect(url_for('customer_agreement', **redirect_params))
 
         if action == 'save':
             # If new_customer, update the placeholder with filled-in details

@@ -67,7 +67,7 @@
 
     <div class="mt-4 no-print" style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
       <h5>Add Additional Equipment</h5>
-      <form method="post" id="addEquipmentForm">
+      <form method="post" id="addEquipmentForm" onsubmit="return copyCustomerDataToAddEquipmentForm();">
         <input type="hidden" name="action" value="add_equipment">
         {% if loan_ids %}
           <input type="hidden" name="loan_ids" value="{{ loan_ids }}">
@@ -77,6 +77,9 @@
         {% endif %}
         {% if new_customer %}
           <input type="hidden" name="new_customer" value="1">
+          <input type="hidden" name="add_equipment_new_name" id="add_equipment_new_name">
+          <input type="hidden" name="add_equipment_new_phone" id="add_equipment_new_phone">
+          <input type="hidden" name="add_equipment_new_zip" id="add_equipment_new_zip">
         {% endif %}
         <div>
           <input type="text" id="equipmentSearch" class="form-control" placeholder="Type equipment ID or name to search">
@@ -360,5 +363,20 @@ function prepareSignature(){
   if(zipEl) document.getElementById('hidden_new_zip').value = zipEl.value;
   {% endif %}
 }
+
+{% if new_customer %}
+function copyCustomerDataToAddEquipmentForm() {
+  var nameEl = document.getElementById('new_name');
+  var phoneEl = document.getElementById('new_phone');
+  var zipEl = document.getElementById('new_zip');
+  var hiddenName = document.getElementById('add_equipment_new_name');
+  var hiddenPhone = document.getElementById('add_equipment_new_phone');
+  var hiddenZip = document.getElementById('add_equipment_new_zip');
+  if (nameEl && hiddenName) hiddenName.value = nameEl.value;
+  if (phoneEl && hiddenPhone) hiddenPhone.value = phoneEl.value;
+  if (zipEl && hiddenZip) hiddenZip.value = zipEl.value;
+  return true;
+}
+{% endif %}
 </script>
 {% endblock %}

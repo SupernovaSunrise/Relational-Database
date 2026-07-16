@@ -69,6 +69,7 @@
       <h5>Add Additional Equipment</h5>
       <form method="post" id="addEquipmentForm" onsubmit="return copyCustomerDataToAddEquipmentForm();">
         <input type="hidden" name="action" value="add_equipment">
+        <input type="hidden" name="checkout_date" id="add_equipment_checkout_date">
         {% if loan_ids %}
           <input type="hidden" name="loan_ids" value="{{ loan_ids }}">
         {% endif %}
@@ -215,6 +216,7 @@
 
     <form method="post" onsubmit="prepareSignature()">
       <input type="hidden" name="signature_data" id="signature_data">
+      <input type="hidden" name="checkout_date" id="save_checkout_date">
       {% if new_customer %}
         <input type="hidden" name="new_customer" value="1">
         <input type="hidden" name="new_name" id="hidden_new_name">
@@ -354,6 +356,7 @@ function updateReturnByDate() {
 function prepareSignature(){
   let data = canvas.toDataURL('image/png');
   document.getElementById('signature_data').value = data;
+  copyCheckoutDateToForm('save_checkout_date');
   {% if new_customer %}
   var nameEl = document.getElementById('new_name');
   var phoneEl = document.getElementById('new_phone');
@@ -362,6 +365,12 @@ function prepareSignature(){
   if(phoneEl) document.getElementById('hidden_new_phone').value = phoneEl.value;
   if(zipEl) document.getElementById('hidden_new_zip').value = zipEl.value;
   {% endif %}
+}
+
+function copyCheckoutDateToForm(targetId) {
+  var checkoutDate = document.getElementById('checkout_date');
+  var target = document.getElementById(targetId);
+  if (checkoutDate && target) target.value = formatDateInput(checkoutDate);
 }
 
 {% if new_customer %}
@@ -375,6 +384,12 @@ function copyCustomerDataToAddEquipmentForm() {
   if (nameEl && hiddenName) hiddenName.value = nameEl.value;
   if (phoneEl && hiddenPhone) hiddenPhone.value = phoneEl.value;
   if (zipEl && hiddenZip) hiddenZip.value = zipEl.value;
+  copyCheckoutDateToForm('add_equipment_checkout_date');
+  return true;
+}
+{% else %}
+function copyCustomerDataToAddEquipmentForm() {
+  copyCheckoutDateToForm('add_equipment_checkout_date');
   return true;
 }
 {% endif %}

@@ -1120,7 +1120,7 @@ def customer_agreement(customer_id):
             cursor = conn.cursor()
             placeholders = ",".join("?" for _ in loan_ids)
             cursor.execute(
-                f"SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date, loans.agreement_date FROM loans "
+                f"SELECT loans.id, loans.equipment_id, equipment.item_name, loans.checked_out_date, loans.due_date, loans.agreement_date FROM loans "
                 f"LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
                 f"WHERE loans.id IN ({placeholders})",
                 loan_ids,
@@ -1137,7 +1137,7 @@ def customer_agreement(customer_id):
         conn = connect_db()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT loans.id, loans.equipment_id, equipment.item_name, loans.due_date, loans.agreement_date FROM loans "
+            "SELECT loans.id, loans.equipment_id, equipment.item_name, loans.checked_out_date, loans.due_date, loans.agreement_date FROM loans "
             "LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
             "WHERE loans.id = ?",
             (loan_id,)
@@ -1186,6 +1186,7 @@ def customer_agreement(customer_id):
             selected_equipment = request.form.getlist('equipment_ids')
             new_equipment_id = request.form.get('new_equipment_id', '').strip().upper()
             new_item_name = request.form.get('new_item_name', '').strip()
+            checkout_date = normalize_date_input(request.form.get('checkout_date', '')) or datetime.today().date().isoformat()
             if not selected_equipment and not new_equipment_id:
                 flash('Please select at least one equipment item to add or provide a new equipment entry.')
                 return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=loan_ids_csv, loan_id=loan_id, new_customer=new_customer))
@@ -1258,17 +1259,16 @@ def customer_agreement(customer_id):
                 )
                 if cursor.fetchone():
                     continue
-                checked_out_date = datetime.today().date()
-                due_date_value = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+                due_date_value = calculate_due_date(checkout_date, CHECKOUT_PERIOD_DAYS)
                 cursor.execute(
                     "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date) VALUES (?, ?, ?, ?, ?, ?)",
-                    (customer_id, equipment_id, checked_out_date.isoformat(), due_date_value.isoformat(), None, None),
+                    (customer_id, equipment_id, checkout_date, due_date_value, None, None),
                 )
                 new_loan_id = cursor.lastrowid
                 # Log every item; is_first_item=0 since initial item already logged
                 cursor.execute(
                     "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
-                    (customer_zip, equipment_row['item_name'], equipment_id, checked_out_date.isoformat(), 0),
+                    (customer_zip, equipment_row['item_name'], equipment_id, checkout_date, 0),
                 )
                 if loan_ids_csv:
                     loan_ids_csv += f",{new_loan_id}"

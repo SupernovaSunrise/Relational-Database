@@ -112,7 +112,7 @@
             <td>
                 {% if item.loan_id %}
                     {% if item.agreement_data %}
-                        <a class="btn" href="{{ url_for('agreement_view', loan_id=item.loan_id) }}">View Agreement</a>
+                        <a class="btn" href="{{ url_for('customer_agreement_view', customer_id=item.customer_id) }}">View Agreement</a>
                     {% endif %}
                     <form method="POST" style="display:inline; margin:0;">
                         <input type="hidden" name="action" value="return">

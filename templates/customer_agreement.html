@@ -292,6 +292,26 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 });
 
+let agreementSubmitting = false;
+document.querySelectorAll('form[method="post"]').forEach(function (form) {
+  form.addEventListener('submit', function () {
+    agreementSubmitting = true;
+  });
+});
+
+window.addEventListener('pagehide', function () {
+  if (agreementSubmitting) return;
+  const loanIds = {{ loan_ids|tojson }};
+  const loanId = {{ loan_id|tojson }};
+  if (!loanIds && !loanId) return;
+
+  const cancellation = new FormData();
+  cancellation.append('action', 'cancel');
+  if (loanIds) cancellation.append('loan_ids', loanIds);
+  if (loanId) cancellation.append('loan_id', loanId);
+  navigator.sendBeacon(window.location.href, cancellation);
+});
+
 function formatDateInput(input) {
   if (!input) return '';
   const value = input.value.trim();

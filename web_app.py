@@ -489,7 +489,7 @@ def master_control():
     cursor = conn.cursor()
     query = (
         "SELECT equipment.equipment_id, equipment.item_name, customers.id AS customer_id, customers.name AS customer_name, "
-        "customers.phone AS customer_phone, loans.id AS loan_id, loans.checked_out_date, loans.due_date "
+        "customers.phone AS customer_phone, loans.id AS loan_id, loans.checked_out_date, loans.due_date, loans.agreement_data "
         "FROM equipment "
         "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
         "LEFT JOIN customers ON loans.customer_id = customers.id "
@@ -531,16 +531,22 @@ def customers():
     search = request.args.get('search', '').strip()
     conn = connect_db()
     cursor = conn.cursor()
+    customer_query = (
+        "SELECT customers.id, customers.name, customers.phone, customers.zip_code, customers.date_added, "
+        "EXISTS(SELECT 1 FROM loans WHERE loans.customer_id = customers.id "
+        "AND loans.returned_date IS NULL AND loans.agreement_data IS NOT NULL) AS has_agreement "
+        "FROM customers "
+    )
     if search:
         search_pattern = f"%{search}%"
         cursor.execute(
-            "SELECT id, name, phone, zip_code, date_added FROM customers "
+            customer_query +
             "WHERE name LIKE ? OR phone LIKE ? OR zip_code LIKE ? "
             "ORDER BY name",
             (search_pattern, search_pattern, search_pattern),
         )
     else:
-        cursor.execute("SELECT id, name, phone, zip_code, date_added FROM customers ORDER BY name")
+        cursor.execute(customer_query + "ORDER BY name")
     customers_list = cursor.fetchall()
     conn.close()
     return render_template('customers.html', customers=customers_list, search=search)
@@ -741,7 +747,7 @@ def return_equipment():
     conn = connect_db()
     cursor = conn.cursor()
     query = (
-        "SELECT loans.id, loans.equipment_id, equipment.item_name, customers.name, "
+        "SELECT loans.id, loans.customer_id, loans.equipment_id, equipment.item_name, customers.name, "
         "customers.zip_code, loans.checked_out_date, loans.due_date, loans.agreement_data "
         "FROM loans "
         "JOIN equipment ON loans.equipment_id = equipment.equipment_id "
@@ -970,11 +976,13 @@ def settings():
 def reports():
     report_type = request.args.get('report_type', 'checkout')
     year_filter = request.args.get('year_filter', '')
+    month_filter = request.args.get('month_filter', '')
 
     if request.method == 'POST':
         action = request.form.get('action')
         report_type = request.form.get('report_type', report_type)
         year_filter = request.form.get('year_filter', year_filter)
+        month_filter = request.form.get('month_filter', month_filter)
         conn = connect_db()
         cursor = conn.cursor()
         if action == 'delete_checkout':
@@ -990,7 +998,7 @@ def reports():
                 conn.commit()
                 flash('Item sale log entry removed successfully.')
         conn.close()
-        return redirect(url_for('reports', report_type=report_type, year_filter=year_filter))
+        return redirect(url_for('reports', report_type=report_type, year_filter=year_filter, month_filter=month_filter))
     
     conn = connect_db()
     cursor = conn.cursor()
@@ -1000,6 +1008,7 @@ def reports():
     analytics_summary = None
     daily_guests = []
     monthly_stats = []
+    analytics_months = []
 
     if report_type == 'checkout':
         query = "SELECT id, customer_zip_code, item_name, equipment_id, checkout_date, is_first_item FROM checkout_log WHERE 1=1"
@@ -1029,14 +1038,28 @@ def reports():
         params = (year_filter,) if year_filter else ()
 
         cursor.execute(
+            f"SELECT DISTINCT strftime('%Y-%m', checked_out_date) AS month FROM loans WHERE 1=1 {year_clause} ORDER BY month DESC",
+            params,
+        )
+        analytics_months = [row['month'] for row in cursor.fetchall() if row['month']]
+        if month_filter not in analytics_months:
+            month_filter = analytics_months[0] if analytics_months else ''
+
+        daily_clause = year_clause
+        daily_params = params
+        if month_filter:
+            daily_clause += " AND strftime('%Y-%m', checked_out_date) = ?"
+            daily_params += (month_filter,)
+
+        cursor.execute(
             f"""SELECT checked_out_date AS date,
                        COUNT(DISTINCT customer_id || '_' || checked_out_date) AS guest_count,
                        COUNT(*) AS item_count
                FROM loans
-               WHERE 1=1 {year_clause}
+               WHERE 1=1 {daily_clause}
                GROUP BY checked_out_date
                ORDER BY checked_out_date DESC""",
-            params,
+            daily_params,
         )
         daily_guests = cursor.fetchall()
 
@@ -1088,7 +1111,9 @@ def reports():
         report_type=report_type,
         report_title=report_title,
         year_filter=year_filter,
+        month_filter=month_filter,
         years=years,
+        analytics_months=analytics_months,
         analytics_summary=analytics_summary,
         daily_guests=daily_guests,
         monthly_stats=monthly_stats,
@@ -1418,20 +1443,50 @@ def agreement_view(loan_id):
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT loans.id, loans.equipment_id, loans.agreement_data, loans.agreement_date, loans.due_date, "
-        "customers.name as customer_name, customers.phone, customers.zip_code, equipment.item_name "
-        "FROM loans "
-        "JOIN customers ON loans.customer_id = customers.id "
-        "LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
-        "WHERE loans.id = ? AND loans.returned_date IS NULL",
+        "SELECT customer_id FROM loans WHERE id = ? AND returned_date IS NULL AND agreement_data IS NOT NULL",
         (loan_id,),
     )
     agreement = cursor.fetchone()
     conn.close()
-    if not agreement or not agreement['agreement_data']:
+    if not agreement:
         flash('Agreement not found or no saved signature available.')
         return redirect(url_for('return_equipment'))
-    return render_template('agreement_view.html', agreement=agreement)
+    return redirect(url_for('customer_agreement_view', customer_id=agreement['customer_id']))
+
+
+@app.route('/customer_agreement_view/<int:customer_id>')
+def customer_agreement_view(customer_id):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, phone, zip_code FROM customers WHERE id = ?", (customer_id,))
+    customer = cursor.fetchone()
+    if not customer:
+        conn.close()
+        flash('Customer not found.')
+        return redirect(url_for('customers'))
+
+    cursor.execute(
+        "SELECT loans.id, loans.equipment_id, equipment.item_name, loans.checked_out_date, loans.due_date, "
+        "loans.agreement_date, loans.agreement_data "
+        "FROM loans LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id "
+        "WHERE loans.customer_id = ? AND loans.returned_date IS NULL AND loans.agreement_data IS NOT NULL "
+        "ORDER BY loans.checked_out_date, loans.id",
+        (customer_id,),
+    )
+    agreements = cursor.fetchall()
+    conn.close()
+    if not agreements:
+        flash('No signed active agreement found for this customer.')
+        return redirect(url_for('customers'))
+
+    latest_agreement = max(agreements, key=lambda loan: (loan['agreement_date'] or '', loan['id']))
+    return render_template(
+        'agreement_view.html',
+        customer=customer,
+        agreements=agreements,
+        signature_data=latest_agreement['agreement_data'],
+        agreement_date=latest_agreement['agreement_date'],
+    )
 
 @app.route('/inline_update', methods=['POST'])
 def inline_update():

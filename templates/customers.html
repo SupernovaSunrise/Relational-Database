@@ -33,6 +33,9 @@
             <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="zip_code">{{ customer.zip_code }}</td>
             <td>{{ customer.date_added }}</td>
             <td>
+                {% if customer.has_agreement %}
+                <a class="btn" href="{{ url_for('customer_agreement_view', customer_id=customer.id) }}">View Agreement</a>
+                {% endif %}
                 <form method="POST" action="{{ url_for('delete_customer', customer_id=customer.id) }}" style="display:inline; margin:0;">
                     <button type="submit" class="btn btn-danger" onclick="return confirm('Delete customer {{ customer.name }}?');">Delete</button>
                 </form>

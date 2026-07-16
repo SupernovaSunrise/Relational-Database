@@ -11,19 +11,19 @@
     <div class="form-group" style="min-width: 150px;">
         <label for="sort_by">Sort By</label>
         <select id="sort_by">
-            <option value="due_date">Due Date</option>
-            <option value="equipment_id">Equipment ID</option>
-            <option value="item_name">Item Name</option>
-            <option value="customer_name">Customer Name</option>
-            <option value="checked_out_date">Checked Out Date</option>
-            <option value="customer_zip">Customer Zip</option>
+            <option value="due_date" {% if sort_by == 'due_date' %}selected{% endif %}>Due Date</option>
+            <option value="equipment_id" {% if sort_by == 'equipment_id' %}selected{% endif %}>Equipment ID</option>
+            <option value="item_name" {% if sort_by == 'item_name' %}selected{% endif %}>Item Name</option>
+            <option value="customer_name" {% if sort_by == 'customer_name' %}selected{% endif %}>Customer Name</option>
+            <option value="checked_out_date" {% if sort_by == 'checked_out_date' %}selected{% endif %}>Checked Out Date</option>
+            <option value="customer_zip" {% if sort_by == 'customer_zip' %}selected{% endif %}>Customer Zip</option>
         </select>
     </div>
     <div class="form-group" style="min-width: 100px;">
         <label for="sort_dir">Order</label>
         <select id="sort_dir">
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
+            <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
+            <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
         </select>
     </div>
 </div>
@@ -60,7 +60,7 @@
             <td>{{ item.zip_code }}</td>
             <td>
                 {% if item.agreement_data %}
-                    <a class="btn" href="{{ url_for('agreement_view', loan_id=item.id) }}">View Agreement</a>
+                    <a class="btn" href="{{ url_for('customer_agreement_view', customer_id=item.customer_id) }}">View Agreement</a>
                 {% else %}
                     <span style="color: #666;">None</span>
                 {% endif %}
@@ -100,8 +100,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var dir = sortDir.value === 'desc' ? -1 : 1;
         var rows = Array.from(tbody.querySelectorAll('.return-row'));
         rows.sort(function (a, b) {
-            var aVal = (a.getAttribute('data-' + key) || '').toLowerCase();
-            var bVal = (b.getAttribute('data-' + key) || '').toLowerCase();
+            var attribute = 'data-' + key.replace(/_/g, '-');
+            var aVal = (a.getAttribute(attribute) || '').toLowerCase();
+            var bVal = (b.getAttribute(attribute) || '').toLowerCase();
             return aVal < bVal ? -dir : aVal > bVal ? dir : 0;
         });
         rows.forEach(function (r) { tbody.appendChild(r); });
@@ -109,6 +110,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     sortBy.addEventListener('change', applySort);
     sortDir.addEventListener('change', applySort);
+    applySort();
 })();
 </script>
 {% endblock %}

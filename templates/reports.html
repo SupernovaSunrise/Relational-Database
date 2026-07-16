@@ -239,3 +239,107 @@
 {% endif %}
 
 {% endblock %}
+{% else %}
+    <h2>{{ report_title }}{% if year_filter %} - {{ year_filter }}{% endif %}</h2>
+
+    {% if report_data %}
+    <div style="margin-bottom: 15px;">
+        <input id="reportSearch" type="search" placeholder="Search {{ report_title }}..." autocomplete="off"
+               style="width: 100%; max-width: 400px; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
+
+    <table id="reportTable">
+        <thead>
+            <tr>
+                {% if report_type == 'checkout' %}
+                    <th>Checkout Date</th>
+                    <th>Equipment ID</th>
+                    <th>Item Name</th>
+                    <th>Customer ZIP Code</th>
+                    <th>Actions</th>
+                {% else %}
+                    <th>Deletion Date</th>
+                    <th>Equipment ID</th>
+                    <th>Item Name</th>
+                    <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data %}
+            {% if report_type == 'checkout' %}
+            <tr class="report-row" data-search-text="{{ item.checkout_date }} {{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_zip_code }}">
+                <td>{{ item.checkout_date }}</td>
+                <td>{{ item.equipment_id }}</td>
+                <td>{{ item.item_name }}</td>
+                <td>{{ item.customer_zip_code }}</td>
+                <td>
+                    <form method="post" style="display:inline;">
+                        <input type="hidden" name="action" value="delete_checkout">
+                        <input type="hidden" name="checkout_id" value="{{ item.id }}">
+                        <input type="hidden" name="report_type" value="{{ report_type }}">
+                        <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                        <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr class="report-row" data-search-text="{{ item.deletion_date }} {{ item.equipment_id|lower }} {{ item.item_name|lower }}">
+                <td>{{ item.deletion_date }}</td>
+                <td>{{ item.equipment_id }}</td>
+                <td>{{ item.item_name }}</td>
+                <td>
+                    <form method="post" style="display:inline;">
+                        <input type="hidden" name="action" value="delete_item_sale">
+                        <input type="hidden" name="item_sale_id" value="{{ item.id }}">
+                        <input type="hidden" name="report_type" value="{{ report_type }}">
+                        <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                        <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    <p id="reportCount" style="margin-top: 20px;"><strong>Total Records: {{ report_data|length }}</strong></p>
+    <p id="noResults" style="display:none; margin-top:20px;">No records match your search.</p>
+
+    <script>
+    (function () {
+        var input     = document.getElementById('reportSearch');
+        var rows      = Array.from(document.querySelectorAll('.report-row'));
+        var countEl   = document.getElementById('reportCount');
+        var noResults = document.getElementById('noResults');
+        var total     = rows.length;
+        var rafPending = false;
+        var lastQuery  = '';
+        input.addEventListener('input', function () {
+            if (!rafPending) {
+                rafPending = true;
+                requestAnimationFrame(function () {
+                    rafPending = false;
+                    var query = input.value.toLowerCase().trim();
+                    if (query === lastQuery) return;
+                    lastQuery = query;
+                    var visible = 0;
+                    for (var i = 0; i < rows.length; i++) {
+                        var matches = !query || rows[i].getAttribute('data-search-text').indexOf(query) !== -1;
+                        rows[i].style.display = matches ? '' : 'none';
+                        if (matches) visible++;
+                    }
+                    countEl.querySelector('strong').textContent =
+                        query ? 'Showing ' + visible + ' of ' + total + ' records' : 'Total Records: ' + total;
+                    noResults.style.display = visible === 0 && query ? 'block' : 'none';
+                });
+            }
+        });
+    })();
+    </script>
+
+    {% else %}
+    <p>No records found for the selected filters.</p>
+    {% endif %}
+{% endif %}
+
+{% endblock %}

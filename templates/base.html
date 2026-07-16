@@ -239,12 +239,42 @@
             });
         }
 
+        var DATE_FIELDS = { 'checked_out_date': true, 'due_date': true, 'date_verified': true };
+
+        function formatDateCell(value) {
+            if (!value) return value;
+            // Already YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+            // MM/DD/YYYY or M/D/YYYY
+            var slash = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (slash) {
+                var d = new Date(Number(slash[3]), Number(slash[1]) - 1, Number(slash[2]));
+                if (!isNaN(d.getTime()))
+                    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            }
+            // MM-DD-YYYY
+            var dash = value.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+            if (dash) {
+                var d = new Date(Number(dash[3]), Number(dash[1]) - 1, Number(dash[2]));
+                if (!isNaN(d.getTime()))
+                    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            }
+            return value;
+        }
+
         document.querySelectorAll('td[contenteditable="true"][data-table][data-row-id][data-field]').forEach(function(cell) {
             cell.addEventListener('focus', function() { cell.dataset.originalValue = cell.textContent.trim(); });
             cell.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); cell.blur(); } });
             cell.addEventListener('blur', function() {
                 var originalValue = cell.dataset.originalValue || '';
                 var newValue = cell.textContent.trim();
+                if (DATE_FIELDS[cell.dataset.field]) {
+                    var formatted = formatDateCell(newValue);
+                    if (formatted !== newValue) {
+                        cell.textContent = formatted;
+                        newValue = formatted;
+                    }
+                }
                 if (newValue !== originalValue) saveCell(cell, cell.dataset.rowId, cell.dataset.field, cell.dataset.table, newValue, originalValue);
             });
         });

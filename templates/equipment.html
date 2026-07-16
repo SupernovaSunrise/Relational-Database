@@ -6,7 +6,7 @@
 <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
         <label for="search">Search equipment</label>
-        <input id="search" type="search" placeholder="Equipment ID, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
+        <input id="search" type="search" value="{{ search }}" placeholder="Equipment ID, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
 </div>
 
@@ -32,6 +32,7 @@
             <td>{% if item.loan_id %}Checked out to {{ item.customer_name }} until {{ item.due_date }}{% else %}Available{% endif %}</td>
             <td>
                 <form method="POST" action="{{ url_for('delete_equipment', equipment_id=item.equipment_id) }}" style="display:inline; margin:0;">
+                    <input type="hidden" name="search" class="search-state" value="{{ search }}">
                     <button type="submit" class="btn btn-danger" onclick="return confirm('Delete equipment {{ item.equipment_id }}?');">Delete</button>
                 </form>
             </td>
@@ -49,6 +50,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof initTableSearch === 'function') {
         initTableSearch({ inputId: 'search', rowSelector: '.equipment-row', noResultsId: 'noResults' });
     }
+    document.querySelectorAll('form[method="POST"]').forEach(function (form) {
+        form.addEventListener('submit', function () {
+            form.querySelector('.search-state').value = document.getElementById('search').value;
+        });
+    });
 });
 </script>
 {% endblock %}

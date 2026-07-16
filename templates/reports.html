@@ -13,7 +13,7 @@
             box-shadow: none;
             max-width: 100%;
         }
-        nav, .report-filters, .print-button {
+        nav, .report-filters, .print-button, .guest-month-filter {
             display: none;
         }
         table {
@@ -127,7 +127,7 @@
 
     <div class="analytics-box">
         <h3>Guests Per Day</h3>
-        <form method="GET" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+        <form method="GET" class="guest-month-filter" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
             <input type="hidden" name="report_type" value="analytics">
             <input type="hidden" name="year_filter" value="{{ year_filter }}">
             <label for="month_filter"><strong>Month:</strong></label>
@@ -221,6 +221,7 @@
                             <input type="hidden" name="checkout_id" value="{{ item.id }}">
                             <input type="hidden" name="report_type" value="{{ report_type }}">
                             <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                            <input type="hidden" name="month_filter" value="{{ month_filter }}">
                             <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
                         </form>
                     </td>
@@ -234,6 +235,7 @@
                             <input type="hidden" name="item_sale_id" value="{{ item.id }}">
                             <input type="hidden" name="report_type" value="{{ report_type }}">
                             <input type="hidden" name="year_filter" value="{{ year_filter }}">
+                            <input type="hidden" name="month_filter" value="{{ month_filter }}">
                             <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
                         </form>
                     </td>

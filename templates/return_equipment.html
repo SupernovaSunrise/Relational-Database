@@ -6,7 +6,7 @@
 <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
     <div class="form-group" style="flex: 1; min-width: 220px; margin-bottom: 0;">
         <label for="search">Search checked-out items</label>
-        <input id="search" type="search" placeholder="Equipment, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
+        <input id="search" type="search" value="{{ search }}" placeholder="Equipment, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
     <div class="form-group" style="min-width: 150px;">
         <label for="sort_by">Sort By</label>
@@ -68,6 +68,9 @@
             <td>
                 <form method="POST" style="margin:0; display:inline;">
                     <input type="hidden" name="loan_id" value="{{ item.id }}">
+                    <input type="hidden" name="search" class="return-search-state" value="{{ search }}">
+                    <input type="hidden" name="sort_by" class="return-sort-by-state" value="{{ sort_by }}">
+                    <input type="hidden" name="sort_dir" class="return-sort-dir-state" value="{{ sort_dir }}">
                     <button type="submit" class="btn btn-danger">Return</button>
                 </form>
             </td>
@@ -86,6 +89,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof initTableSearch === 'function') {
         initTableSearch({ inputId: 'search', rowSelector: '.return-row', noResultsId: 'noResults' });
     }
+
+    document.querySelectorAll('form[method="POST"]').forEach(function (form) {
+        form.addEventListener('submit', function () {
+            form.querySelector('.return-search-state').value = document.getElementById('search').value;
+            form.querySelector('.return-sort-by-state').value = document.getElementById('sort_by').value;
+            form.querySelector('.return-sort-dir-state').value = document.getElementById('sort_dir').value;
+        });
+    });
 });
 
 // Sort controls (separate from search — only runs on select change)

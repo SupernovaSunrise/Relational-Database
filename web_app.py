@@ -648,6 +648,7 @@ def add_equipment():
 
 @app.route('/delete_customer/<int:customer_id>', methods=['POST'])
 def delete_customer(customer_id):
+    search = request.form.get('search', '').strip()
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute(
@@ -667,6 +668,7 @@ def delete_customer(customer_id):
 
 @app.route('/delete_equipment/<equipment_id>', methods=['POST'])
 def delete_equipment(equipment_id):
+    search = request.form.get('search', '').strip()
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute(
@@ -676,7 +678,7 @@ def delete_equipment(equipment_id):
     if cursor.fetchone():
         conn.close()
         flash('Cannot delete equipment while it is checked out.')
-        return redirect(url_for('equipment'))
+        return redirect(url_for('equipment', search=search))
 
     # Get item name before deleting
     cursor.execute("SELECT item_name FROM equipment WHERE equipment_id = ?", (equipment_id,))
@@ -693,7 +695,7 @@ def delete_equipment(equipment_id):
     conn.commit()
     conn.close()
     flash('Equipment deleted successfully.')
-    return redirect(url_for('equipment'))
+    return redirect(url_for('equipment', search=search))
 
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
@@ -703,10 +705,13 @@ def checkout():
 def return_equipment():
     if request.method == 'POST':
         loan_id = request.form['loan_id']
+        search = request.form.get('search', '').strip()
+        sort_by = request.form.get('sort_by', 'due_date')
+        sort_dir = request.form.get('sort_dir', 'asc')
 
         if not loan_id:
             flash('Please select equipment to return.')
-            return redirect(url_for('return_equipment'))
+            return redirect(url_for('return_equipment', search=search, sort_by=sort_by, sort_dir=sort_dir))
 
         returned_date = datetime.today().date().isoformat()
         conn = connect_db()
@@ -719,7 +724,7 @@ def return_equipment():
         conn.close()
 
         flash('Equipment returned successfully.')
-        return redirect(url_for('checked_out'))
+        return redirect(url_for('return_equipment', search=search, sort_by=sort_by, sort_dir=sort_dir))
 
     search = request.args.get('search', '').strip()
     sort_by = request.args.get('sort_by', 'due_date')
@@ -1467,7 +1472,7 @@ def customer_agreement_view(customer_id):
     if not customer:
         conn.close()
         flash('Customer not found.')
-        return redirect(url_for('customers'))
+        return redirect(url_for('customers', search=search))
 
     cursor.execute(
         "SELECT loans.id, loans.equipment_id, equipment.item_name, loans.checked_out_date, loans.due_date, "
@@ -1481,7 +1486,7 @@ def customer_agreement_view(customer_id):
     conn.close()
     if not agreements:
         flash('No signed active agreement found for this customer.')
-        return redirect(url_for('customers'))
+    return redirect(url_for('customers', search=search))
 
     latest_agreement = max(agreements, key=lambda loan: (loan['agreement_date'] or '', loan['id']))
     return render_template(

@@ -68,9 +68,11 @@ def test_adding_equipment_uses_the_entered_checkout_date(agreement_database):
                 "checkout_date": "03/01/2024",
                 "equipment_ids": "BB-0002",
             },
+            follow_redirects=True,
         )
 
-    assert response.status_code == 302
+    assert response.status_code == 200
+    assert b'id="checkout_date" name="checkout_date" value="2024-03-01"' in response.data
     conn = web_app.connect_db()
     new_loan = conn.execute(
         "SELECT checked_out_date, due_date FROM loans WHERE equipment_id = ?", ("BB-0002",)

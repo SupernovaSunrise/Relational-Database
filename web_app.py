@@ -1111,7 +1111,7 @@ def customer_agreement(customer_id):
     loan_id = request.args.get('loan_id')
     loans = []
     due_date = None
-    checkout_date = request.form.get('checkout_date', '') if request.method == 'POST' else ''
+    checkout_date = request.form.get('checkout_date', '') if request.method == 'POST' else request.args.get('checkout_date', '')
     agreement_date = request.form.get('agreement_date', '') if request.method == 'POST' else ''
     if loan_ids_csv:
         loan_ids = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
@@ -1277,6 +1277,7 @@ def customer_agreement(customer_id):
             conn.commit()
             conn.close()
             redirect_params = {'customer_id': customer_id, 'loan_ids': loan_ids_csv}
+            redirect_params['checkout_date'] = checkout_date
             if new_customer:
                 redirect_params['new_customer'] = new_customer
             return redirect(url_for('customer_agreement', **redirect_params))

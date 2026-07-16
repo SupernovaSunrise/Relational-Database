@@ -94,16 +94,6 @@
                     {% endfor %}
                 </select>
             </div>
-            {% if report_type == 'analytics' %}
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="month_filter"><strong>Guests Per Day Month:</strong></label>
-                <select id="month_filter" name="month_filter">
-                    {% for month in analytics_months %}
-                    <option value="{{ month }}" {% if month_filter == month %}selected{% endif %}>{{ month }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
             <button type="submit" class="btn">Filter</button>
         </form>
     </div>
@@ -137,6 +127,16 @@
 
     <div class="analytics-box">
         <h3>Guests Per Day</h3>
+        <form method="GET" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+            <input type="hidden" name="report_type" value="analytics">
+            <input type="hidden" name="year_filter" value="{{ year_filter }}">
+            <label for="month_filter"><strong>Month:</strong></label>
+            <select id="month_filter" name="month_filter" onchange="this.form.submit()">
+                {% for month in analytics_months %}
+                <option value="{{ month }}" {% if month_filter == month %}selected{% endif %}>{{ month }}</option>
+                {% endfor %}
+            </select>
+        </form>
         <table>
             <thead>
                 <tr>

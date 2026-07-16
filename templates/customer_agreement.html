@@ -293,6 +293,18 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 let agreementSubmitting = false;
+const agreementLoanIds = {{ loan_ids|tojson }};
+const agreementLoanId = {{ loan_id|tojson }};
+
+function pendingCheckoutCancellation() {
+  if (!agreementLoanIds && !agreementLoanId) return null;
+  const cancellation = new FormData();
+  cancellation.append('action', 'cancel');
+  if (agreementLoanIds) cancellation.append('loan_ids', agreementLoanIds);
+  if (agreementLoanId) cancellation.append('loan_id', agreementLoanId);
+  return cancellation;
+}
+
 document.querySelectorAll('form[method="post"]').forEach(function (form) {
   form.addEventListener('submit', function () {
     agreementSubmitting = true;
@@ -301,15 +313,21 @@ document.querySelectorAll('form[method="post"]').forEach(function (form) {
 
 window.addEventListener('pagehide', function () {
   if (agreementSubmitting) return;
-  const loanIds = {{ loan_ids|tojson }};
-  const loanId = {{ loan_id|tojson }};
-  if (!loanIds && !loanId) return;
+  const cancellation = pendingCheckoutCancellation();
+  if (cancellation) navigator.sendBeacon(window.location.href, cancellation);
+});
 
-  const cancellation = new FormData();
-  cancellation.append('action', 'cancel');
-  if (loanIds) cancellation.append('loan_ids', loanIds);
-  if (loanId) cancellation.append('loan_id', loanId);
-  navigator.sendBeacon(window.location.href, cancellation);
+document.querySelectorAll('nav a').forEach(function (link) {
+  link.addEventListener('click', function (event) {
+    if (agreementSubmitting) return;
+    const cancellation = pendingCheckoutCancellation();
+    if (!cancellation) return;
+    event.preventDefault();
+    agreementSubmitting = true;
+    const body = new URLSearchParams(cancellation);
+    fetch(window.location.href, { method: 'POST', body: body, keepalive: true })
+      .finally(function () { window.location.href = link.href; });
+  });
 });
 
 function formatDateInput(input) {

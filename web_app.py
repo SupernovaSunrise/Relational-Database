@@ -162,6 +162,8 @@ def init_db():
         cursor.execute("ALTER TABLE loans ADD COLUMN agreement_data TEXT")
     if "agreement_date" not in loan_columns:
         cursor.execute("ALTER TABLE loans ADD COLUMN agreement_date TEXT")
+    if "agreement_pending" not in loan_columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN agreement_pending INTEGER NOT NULL DEFAULT 0")
     
     # Create agreements table
     cursor.execute(
@@ -386,16 +388,11 @@ def master_control():
                         flash(f'Equipment {equipment_id} is already checked out.')
                         return redirect(url_for('master_control'))
                     cursor.execute(
-                        "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date) VALUES (?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date, agreement_pending) VALUES (?, ?, ?, ?, ?, ?, 1)",
                         (new_customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat(), None, None),
                     )
                     loan_id = cursor.lastrowid
                     loan_ids.append(str(loan_id))
-                    is_first = 1 if len(loan_ids) == 1 else 0
-                    cursor.execute(
-                        "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
-                        ('00000', equipment_row['item_name'], equipment_id, checked_out_date.isoformat(), is_first),
-                    )
                 conn.commit()
                 conn.close()
                 return redirect(url_for('customer_agreement', customer_id=new_customer_id, loan_ids=','.join(loan_ids), new_customer=1))
@@ -438,16 +435,11 @@ def master_control():
                         return redirect(url_for('master_control'))
 
                     cursor.execute(
-                        "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date) VALUES (?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date, agreement_pending) VALUES (?, ?, ?, ?, ?, ?, 1)",
                         (customer_id, equipment_id, checked_out_date.isoformat(), due_date.isoformat(), None, None),
                     )
                     loan_id = cursor.lastrowid
                     loan_ids.append(str(loan_id))
-                    is_first = 1 if len(loan_ids) == 1 else 0
-                    cursor.execute(
-                        "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
-                        (customer_zip, equipment_row["item_name"], equipment_id, checked_out_date.isoformat(), is_first),
-                    )
                 conn.commit()
                 conn.close()
                 return redirect(url_for('customer_agreement', customer_id=customer_id, loan_ids=','.join(loan_ids)))
@@ -491,7 +483,7 @@ def master_control():
         "SELECT equipment.equipment_id, equipment.item_name, customers.id AS customer_id, customers.name AS customer_name, "
         "customers.phone AS customer_phone, loans.id AS loan_id, loans.checked_out_date, loans.due_date, loans.agreement_data "
         "FROM equipment "
-        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
+        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL AND loans.agreement_pending = 0 "
         "LEFT JOIN customers ON loans.customer_id = customers.id "
     )
     params = ()
@@ -605,7 +597,7 @@ def equipment():
         "SELECT equipment.equipment_id, equipment.item_name, loans.id AS loan_id, "
         "loans.checked_out_date, loans.due_date, customers.name AS customer_name "
         "FROM equipment "
-        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL "
+        "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL AND loans.agreement_pending = 0 "
         "LEFT JOIN customers ON loans.customer_id = customers.id "
     )
     params = ()
@@ -752,7 +744,7 @@ def return_equipment():
         "FROM loans "
         "JOIN equipment ON loans.equipment_id = equipment.equipment_id "
         "JOIN customers ON loans.customer_id = customers.id "
-        "WHERE loans.returned_date IS NULL "
+        "WHERE loans.returned_date IS NULL AND loans.agreement_pending = 0 "
     )
     params = ()
     if search:
@@ -1038,7 +1030,7 @@ def reports():
         params = (year_filter,) if year_filter else ()
 
         cursor.execute(
-            f"SELECT DISTINCT strftime('%Y-%m', checked_out_date) AS month FROM loans WHERE 1=1 {year_clause} ORDER BY month DESC",
+            f"SELECT DISTINCT strftime('%Y-%m', checked_out_date) AS month FROM loans WHERE agreement_pending = 0 {year_clause} ORDER BY month DESC",
             params,
         )
         analytics_months = [row['month'] for row in cursor.fetchall() if row['month']]
@@ -1056,7 +1048,7 @@ def reports():
                        COUNT(DISTINCT customer_id || '_' || checked_out_date) AS guest_count,
                        COUNT(*) AS item_count
                FROM loans
-               WHERE 1=1 {daily_clause}
+               WHERE agreement_pending = 0 {daily_clause}
                GROUP BY checked_out_date
                ORDER BY checked_out_date DESC""",
             daily_params,
@@ -1069,7 +1061,7 @@ def reports():
                        COUNT(*) AS total_items,
                        COUNT(DISTINCT checked_out_date) AS active_days
                FROM loans
-               WHERE 1=1 {year_clause}
+               WHERE agreement_pending = 0 {year_clause}
                GROUP BY month_year
                ORDER BY month_year DESC""",
             params,
@@ -1088,7 +1080,7 @@ def reports():
 
         # Summary totals
         cursor.execute(
-            f"SELECT COUNT(DISTINCT customer_id || '_' || checked_out_date) AS total_guests, COUNT(*) AS total_checkouts, COUNT(DISTINCT checked_out_date) AS total_days FROM loans WHERE 1=1 {year_clause}",
+            f"SELECT COUNT(DISTINCT customer_id || '_' || checked_out_date) AS total_guests, COUNT(*) AS total_checkouts, COUNT(DISTINCT checked_out_date) AS total_days FROM loans WHERE agreement_pending = 0 {year_clause}",
             params,
         )
         summary_row = cursor.fetchone()
@@ -1101,7 +1093,7 @@ def reports():
             }
 
     # Available years always from loan checked out dates
-    cursor.execute("SELECT DISTINCT strftime('%Y', checked_out_date) as year FROM loans ORDER BY year DESC")
+    cursor.execute("SELECT DISTINCT strftime('%Y', checked_out_date) as year FROM loans WHERE agreement_pending = 0 ORDER BY year DESC")
     years = [row['year'] for row in cursor.fetchall() if row['year']]
     conn.close()
 
@@ -1201,7 +1193,10 @@ def customer_agreement(customer_id):
                         "DELETE FROM checkout_log WHERE equipment_id = ? AND checkout_date = ?",
                         (row['equipment_id'], row['checked_out_date']),
                     )
-                cursor.execute(f"DELETE FROM loans WHERE id IN ({','.join('?' for _ in loans_to_cancel)})", loans_to_cancel)
+                cursor.execute(
+                    f"DELETE FROM loans WHERE id IN ({','.join('?' for _ in loans_to_cancel)}) AND agreement_pending = 1",
+                    loans_to_cancel,
+                )
                 conn.commit()
                 conn.close()
             flash('Checkout cancelled and pending items removed.')
@@ -1286,15 +1281,10 @@ def customer_agreement(customer_id):
                     continue
                 due_date_value = calculate_due_date(checkout_date, CHECKOUT_PERIOD_DAYS)
                 cursor.execute(
-                    "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date, agreement_pending) VALUES (?, ?, ?, ?, ?, ?, 1)",
                     (customer_id, equipment_id, checkout_date, due_date_value, None, None),
                 )
                 new_loan_id = cursor.lastrowid
-                # Log every item; is_first_item=0 since initial item already logged
-                cursor.execute(
-                    "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
-                    (customer_zip, equipment_row['item_name'], equipment_id, checkout_date, 0),
-                )
                 if loan_ids_csv:
                     loan_ids_csv += f",{new_loan_id}"
                 else:
@@ -1354,18 +1344,32 @@ def customer_agreement(customer_id):
                 loan_ids = [int(x) for x in loan_ids_csv.split(',') if x.strip().isdigit()]
                 for lid in loan_ids:
                     cursor.execute(
-                        "UPDATE loans SET checked_out_date = ?, due_date = ?, agreement_data = ?, agreement_date = ? WHERE id = ?",
+                        "UPDATE loans SET checked_out_date = ?, due_date = ?, agreement_data = ?, agreement_date = ?, agreement_pending = 0 WHERE id = ? AND agreement_pending = 1",
                         (checkout_date, due_date, signature_data, agreement_date, lid),
                     )
-                    updated_loans.append(lid)
+                    if cursor.rowcount:
+                        updated_loans.append(lid)
             elif loan_id:
                 cursor.execute(
-                    "UPDATE loans SET checked_out_date = ?, due_date = ?, agreement_data = ?, agreement_date = ? WHERE id = ?",
+                    "UPDATE loans SET checked_out_date = ?, due_date = ?, agreement_data = ?, agreement_date = ?, agreement_pending = 0 WHERE id = ? AND agreement_pending = 1",
                     (checkout_date, due_date, signature_data, agreement_date, loan_id),
                 )
-                updated_loans.append(int(loan_id))
+                if cursor.rowcount:
+                    updated_loans.append(int(loan_id))
 
             if updated_loans:
+                cursor.execute("SELECT zip_code FROM customers WHERE id = ?", (customer_id,))
+                customer_zip = cursor.fetchone()['zip_code']
+                placeholders = ','.join('?' for _ in updated_loans)
+                cursor.execute(
+                    f"SELECT loans.equipment_id, equipment.item_name FROM loans LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id WHERE loans.id IN ({placeholders})",
+                    updated_loans,
+                )
+                for index, row in enumerate(cursor.fetchall()):
+                    cursor.execute(
+                        "INSERT INTO checkout_log (customer_zip_code, item_name, equipment_id, checkout_date, is_first_item) VALUES (?, ?, ?, ?, ?)",
+                        (customer_zip, row['item_name'] or row['equipment_id'], row['equipment_id'], checkout_date, 1 if index == 0 else 0),
+                    )
                 cursor.execute(
                     "INSERT INTO customer_agreements (customer_id, loan_id, waiver_agreed, digital_signature_agreed, signature_data, agreed_date) VALUES (?, ?, ?, ?, ?, ?)",
                     (customer_id, updated_loans[0], 1 if waiver_agreed else 0, 1 if signature_agreed else 0, signature_data, datetime.today().date().isoformat()),

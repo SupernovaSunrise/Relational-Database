@@ -75,7 +75,7 @@
 <div class="report-filters">
     <div style="flex: 1; min-width: 200px;">
         <label for="report_type"><strong>Report Type:</strong></label>
-        <select id="report_type" onchange="window.location.href='{{ url_for('reports') }}?report_type=' + this.value + '&year_filter={{ year_filter or '' }}{% if month_filter %}&month_filter={{ month_filter }}{% endif %}'">
+        <select id="report_type">
             <option value="checkout" {% if report_type == 'checkout' %}selected{% endif %}>Checkout Log</option>
             <option value="item_sales" {% if report_type == 'item_sales' %}selected{% endif %}>Item Sales Log</option>
             <option value="analytics" {% if report_type == 'analytics' %}selected{% endif %}>Analytics</option>
@@ -249,5 +249,21 @@
     <p>No records found for the selected filters.</p>
     {% endif %}
 {% endif %}
+
+<script>
+(function () {
+  var reportTypeSelect = document.getElementById('report_type');
+  if (!reportTypeSelect) return;
+  var reportsBaseUrl = {{ url_for('reports') | tojson }};
+  var yearFilter = {{ (year_filter or '') | tojson }};
+  var monthFilter = {{ (month_filter or '') | tojson }};
+  reportTypeSelect.addEventListener('change', function () {
+    var url = reportsBaseUrl + '?report_type=' + encodeURIComponent(this.value);
+    if (yearFilter) url += '&year_filter=' + encodeURIComponent(yearFilter);
+    if (monthFilter) url += '&month_filter=' + encodeURIComponent(monthFilter);
+    window.location.href = url;
+  });
+})();
+</script>
 
 {% endblock %}

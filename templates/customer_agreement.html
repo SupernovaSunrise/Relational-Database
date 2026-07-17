@@ -105,9 +105,17 @@
       </form>
     </div>
 
+    <script type="application/json" id="agreement-page-data">{{ {
+      'searchApiKey': search_api_key,
+      'checkoutPeriodDays': checkout_period_days,
+      'loanIds': loan_ids,
+      'loanId': loan_id,
+      'isNewCustomer': new_customer or false
+    } | tojson }}</script>
     <script>
-      window.EQUIPMENT_SEARCH_API_KEY = {{ search_api_key | tojson }};
-    (function(){
+      window.agreementPageData = JSON.parse(document.getElementById('agreement-page-data').textContent);
+      window.EQUIPMENT_SEARCH_API_KEY = window.agreementPageData.searchApiKey;
+      (function(){
       const input = document.getElementById('equipmentSearch');
       const resultsDiv = document.getElementById('searchResults');
       let debounceTimer = null;
@@ -258,6 +266,10 @@
 </div>
 
 <script>
+const agreementPageData = window.agreementPageData;
+const isNewCustomer = agreementPageData.isNewCustomer;
+const agreementLoanIds = agreementPageData.loanIds;
+const agreementLoanId = agreementPageData.loanId;
 let canvas = document.getElementById('sigCanvas');
 let ctx = canvas.getContext('2d');
 let drawing = false;
@@ -286,15 +298,13 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     checkoutDateInput.addEventListener('input', updateReturnByDate);
     if (returnByDisplay) {
-      returnByDisplay.dataset.checkoutPeriodDays = {{ checkout_period_days }};
+      returnByDisplay.dataset.checkoutPeriodDays = agreementPageData.checkoutPeriodDays;
     }
     updateReturnByDate();
   }
 });
 
 let agreementSubmitting = false;
-const agreementLoanIds = {{ loan_ids|tojson }};
-const agreementLoanId = {{ loan_id|tojson }};
 
 function pendingCheckoutCancellation() {
   if (!agreementLoanIds && !agreementLoanId) return null;
@@ -395,14 +405,14 @@ function prepareSignature(){
   let data = canvas.toDataURL('image/png');
   document.getElementById('signature_data').value = data;
   copyCheckoutDateToForm('save_checkout_date');
-  {% if new_customer %}
-  var nameEl = document.getElementById('new_name');
-  var phoneEl = document.getElementById('new_phone');
-  var zipEl = document.getElementById('new_zip');
-  if(nameEl) document.getElementById('hidden_new_name').value = nameEl.value;
-  if(phoneEl) document.getElementById('hidden_new_phone').value = phoneEl.value;
-  if(zipEl) document.getElementById('hidden_new_zip').value = zipEl.value;
-  {% endif %}
+  if (isNewCustomer) {
+    var nameEl = document.getElementById('new_name');
+    var phoneEl = document.getElementById('new_phone');
+    var zipEl = document.getElementById('new_zip');
+    if(nameEl) document.getElementById('hidden_new_name').value = nameEl.value;
+    if(phoneEl) document.getElementById('hidden_new_phone').value = phoneEl.value;
+    if(zipEl) document.getElementById('hidden_new_zip').value = zipEl.value;
+  }
 }
 
 function copyCheckoutDateToForm(targetId) {
@@ -411,25 +421,20 @@ function copyCheckoutDateToForm(targetId) {
   if (checkoutDate && target) target.value = formatDateInput(checkoutDate);
 }
 
-{% if new_customer %}
 function copyCustomerDataToAddEquipmentForm() {
-  var nameEl = document.getElementById('new_name');
-  var phoneEl = document.getElementById('new_phone');
-  var zipEl = document.getElementById('new_zip');
-  var hiddenName = document.getElementById('add_equipment_new_name');
-  var hiddenPhone = document.getElementById('add_equipment_new_phone');
-  var hiddenZip = document.getElementById('add_equipment_new_zip');
-  if (nameEl && hiddenName) hiddenName.value = nameEl.value;
-  if (phoneEl && hiddenPhone) hiddenPhone.value = phoneEl.value;
-  if (zipEl && hiddenZip) hiddenZip.value = zipEl.value;
+  if (isNewCustomer) {
+    var nameEl = document.getElementById('new_name');
+    var phoneEl = document.getElementById('new_phone');
+    var zipEl = document.getElementById('new_zip');
+    var hiddenName = document.getElementById('add_equipment_new_name');
+    var hiddenPhone = document.getElementById('add_equipment_new_phone');
+    var hiddenZip = document.getElementById('add_equipment_new_zip');
+    if (nameEl && hiddenName) hiddenName.value = nameEl.value;
+    if (phoneEl && hiddenPhone) hiddenPhone.value = phoneEl.value;
+    if (zipEl && hiddenZip) hiddenZip.value = zipEl.value;
+  }
   copyCheckoutDateToForm('add_equipment_checkout_date');
   return true;
 }
-{% else %}
-function copyCustomerDataToAddEquipmentForm() {
-  copyCheckoutDateToForm('add_equipment_checkout_date');
-  return true;
-}
-{% endif %}
 </script>
 {% endblock %}

@@ -1465,6 +1465,12 @@ def agreement_view(loan_id):
 
 @app.route('/customer_agreement_view/<int:customer_id>')
 def customer_agreement_view(customer_id):
+    search = request.args.get('search', '').strip()
+    # #region agent log
+    import json as _json, time as _time
+    with open('debug-936205.log', 'a', encoding='utf-8') as _f:
+        _f.write(_json.dumps({'sessionId': '936205', 'hypothesisId': 'A', 'location': 'web_app.py:customer_agreement_view:entry', 'message': 'customer_agreement_view called', 'data': {'customer_id': customer_id, 'search': search}, 'timestamp': int(_time.time() * 1000)}) + '\n')
+    # #endregion
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, phone, zip_code FROM customers WHERE id = ?", (customer_id,))
@@ -1472,6 +1478,10 @@ def customer_agreement_view(customer_id):
     if not customer:
         conn.close()
         flash('Customer not found.')
+        # #region agent log
+        with open('debug-936205.log', 'a', encoding='utf-8') as _f:
+            _f.write(_json.dumps({'sessionId': '936205', 'hypothesisId': 'A', 'location': 'web_app.py:customer_agreement_view:no_customer', 'message': 'redirect customer not found', 'data': {'search': search}, 'timestamp': int(_time.time() * 1000)}) + '\n')
+        # #endregion
         return redirect(url_for('customers', search=search))
 
     cursor.execute(
@@ -1486,8 +1496,16 @@ def customer_agreement_view(customer_id):
     conn.close()
     if not agreements:
         flash('No signed active agreement found for this customer.')
-    return redirect(url_for('customers', search=search))
+        # #region agent log
+        with open('debug-936205.log', 'a', encoding='utf-8') as _f:
+            _f.write(_json.dumps({'sessionId': '936205', 'hypothesisId': 'B', 'location': 'web_app.py:customer_agreement_view:no_agreements', 'message': 'redirect no agreements', 'data': {'search': search}, 'timestamp': int(_time.time() * 1000)}) + '\n')
+        # #endregion
+        return redirect(url_for('customers', search=search))
 
+    # #region agent log
+    with open('debug-936205.log', 'a', encoding='utf-8') as _f:
+        _f.write(_json.dumps({'sessionId': '936205', 'hypothesisId': 'B', 'location': 'web_app.py:customer_agreement_view:render', 'message': 'rendering agreement view', 'data': {'agreement_count': len(agreements)}, 'timestamp': int(_time.time() * 1000)}) + '\n')
+    # #endregion
     latest_agreement = max(agreements, key=lambda loan: (loan['agreement_date'] or '', loan['id']))
     return render_template(
         'agreement_view.html',

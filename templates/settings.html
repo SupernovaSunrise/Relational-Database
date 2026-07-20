@@ -11,12 +11,14 @@
         <p>Download your data as Excel files for backup or analysis.</p>
         
         <form method="POST" style="margin-bottom: 15px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="export">
             <input type="hidden" name="export_type" value="customers">
             <button type="submit" class="btn" style="width: 100%;">Export Customers (.xlsx)</button>
         </form>
         
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="export">
             <input type="hidden" name="export_type" value="equipment">
             <button type="submit" class="btn" style="width: 100%;">Export Equipment (.xlsx)</button>
@@ -28,6 +30,7 @@
         <p>Import customers or equipment from Excel files (.xlsx, .xls) or CSV files (.csv).</p>
         
         <form method="POST" enctype="multipart/form-data" style="margin-bottom: 15px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="import_customers">
             <div class="form-group">
                 <label for="customers_file">Import Customers:</label>
@@ -37,6 +40,7 @@
         </form>
         
         <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="import_equipment">
             <div class="form-group">
                 <label for="equipment_file">Import Equipment:</label>

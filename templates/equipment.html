@@ -32,6 +32,7 @@
             <td>{% if item.loan_id %}Checked out to {{ item.customer_name }} until {{ item.due_date }}{% else %}Available{% endif %}</td>
             <td>
                 <form method="POST" action="{{ url_for('delete_equipment', equipment_id=item.equipment_id) }}" style="display:inline; margin:0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="search" class="search-state" value="{{ search }}">
                     <button type="submit" class="btn btn-danger" onclick="return confirm('Delete equipment {{ item.equipment_id }}?');">Delete</button>
                 </form>

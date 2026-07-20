@@ -8,6 +8,7 @@ services:
       - ./backups:/app/backups
     environment:
       - FLASK_ENV=production
+      - FLASK_DEBUG=false
     restart: unless-stopped
     container_name: dme-checkout-app
     healthcheck:
@@ -21,6 +22,9 @@ services:
         - action: sync
           path: ./web_app.py
           target: /app/web_app.py
+        - action: sync
+          path: ./db.py
+          target: /app/db.py
         - action: sync
           path: ./templates
           target: /app/templates

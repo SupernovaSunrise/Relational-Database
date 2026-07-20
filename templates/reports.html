@@ -23,9 +23,17 @@
             display: none !important;
         }
         table {
-            page-break-inside: avoid;
             width: 100%;
             border-collapse: collapse;
+        }
+        table, .analytics-box, .analytics-grid, tr {
+            page-break-inside: auto;
+        }
+        tr {
+            page-break-inside: avoid;
+        }
+        thead {
+            display: table-header-group;
         }
         th, td {
             padding: 8px 10px;

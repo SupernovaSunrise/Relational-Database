@@ -917,7 +917,7 @@ def settings():
 
 @app.route('/reports', methods=['GET', 'POST'])
 def reports():
-    report_type = request.args.get('report_type', 'checkout')
+    report_type = request.args.get('report_type', 'analytics')
     year_filter = request.args.get('year_filter', '')
     month_filter = request.args.get('month_filter', '')
     date_from = request.args.get('date_from', '').strip()

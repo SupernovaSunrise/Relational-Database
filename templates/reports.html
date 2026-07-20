@@ -83,7 +83,7 @@
     </div>
     
     <div style="min-width: 150px;">
-        <form method="GET" style="display: flex; gap: 10px; align-items: flex-end;">
+        <form method="GET" style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
             <input type="hidden" name="report_type" value="{{ report_type }}">
             <div class="form-group" style="margin-bottom: 0;">
                 <label for="year_filter"><strong>Filter by Year:</strong></label>
@@ -94,6 +94,16 @@
                     {% endfor %}
                 </select>
             </div>
+            {% if report_type != 'analytics' %}
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="date_from"><strong>From:</strong></label>
+                <input id="date_from" type="date" name="date_from" value="{{ date_from }}" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="date_to"><strong>To:</strong></label>
+                <input id="date_to" type="date" name="date_to" value="{{ date_to }}" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            {% endif %}
             <button type="submit" class="btn">Filter</button>
         </form>
     </div>
@@ -222,6 +232,8 @@
                             <input type="hidden" name="report_type" value="{{ report_type }}">
                             <input type="hidden" name="year_filter" value="{{ year_filter }}">
                             <input type="hidden" name="month_filter" value="{{ month_filter }}">
+                            <input type="hidden" name="date_from" value="{{ date_from }}">
+                            <input type="hidden" name="date_to" value="{{ date_to }}">
                             <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
                         </form>
                     </td>
@@ -236,6 +248,8 @@
                             <input type="hidden" name="report_type" value="{{ report_type }}">
                             <input type="hidden" name="year_filter" value="{{ year_filter }}">
                             <input type="hidden" name="month_filter" value="{{ month_filter }}">
+                            <input type="hidden" name="date_from" value="{{ date_from }}">
+                            <input type="hidden" name="date_to" value="{{ date_to }}">
                             <button type="submit" class="btn" style="background-color:#dc3545;color:white;">Delete</button>
                         </form>
                     </td>
@@ -257,10 +271,14 @@
   var reportsBaseUrl = {{ url_for('reports') | tojson }};
   var yearFilter = {{ (year_filter or '') | tojson }};
   var monthFilter = {{ (month_filter or '') | tojson }};
+  var dateFrom = {{ (date_from or '') | tojson }};
+  var dateTo = {{ (date_to or '') | tojson }};
   reportTypeSelect.addEventListener('change', function () {
     var url = reportsBaseUrl + '?report_type=' + encodeURIComponent(this.value);
     if (yearFilter) url += '&year_filter=' + encodeURIComponent(yearFilter);
     if (monthFilter) url += '&month_filter=' + encodeURIComponent(monthFilter);
+    if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
+    if (dateTo) url += '&date_to=' + encodeURIComponent(dateTo);
     window.location.href = url;
   });
 })();

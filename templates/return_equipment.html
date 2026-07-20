@@ -8,6 +8,14 @@
         <label for="search">Search checked-out items</label>
         <input id="search" type="search" value="{{ search }}" placeholder="Equipment, item, or customer" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
+    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
+        <label for="date_from">Checked Out From</label>
+        <input id="date_from" type="date" value="{{ date_from }}" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
+    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
+        <label for="date_to">Checked Out To</label>
+        <input id="date_to" type="date" value="{{ date_to }}" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
     <div class="form-group" style="min-width: 150px;">
         <label for="sort_by">Sort By</label>
         <select id="sort_by">
@@ -71,6 +79,8 @@
                     <input type="hidden" name="search" class="return-search-state" value="{{ search }}">
                     <input type="hidden" name="sort_by" class="return-sort-by-state" value="{{ sort_by }}">
                     <input type="hidden" name="sort_dir" class="return-sort-dir-state" value="{{ sort_dir }}">
+                    <input type="hidden" name="date_from" class="return-date-from-state" value="{{ date_from }}">
+                    <input type="hidden" name="date_to" class="return-date-to-state" value="{{ date_to }}">
                     <button type="submit" class="btn btn-danger">Return</button>
                 </form>
             </td>
@@ -95,9 +105,33 @@ document.addEventListener('DOMContentLoaded', function () {
             form.querySelector('.return-search-state').value = document.getElementById('search').value;
             form.querySelector('.return-sort-by-state').value = document.getElementById('sort_by').value;
             form.querySelector('.return-sort-dir-state').value = document.getElementById('sort_dir').value;
+            form.querySelector('.return-date-from-state').value = document.getElementById('date_from').value;
+            form.querySelector('.return-date-to-state').value = document.getElementById('date_to').value;
         });
     });
 });
+
+// Date range auto-apply
+(function () {
+    var dateFrom = document.getElementById('date_from');
+    var dateTo = document.getElementById('date_to');
+    if (!dateFrom || !dateTo) return;
+
+    function applyDateFilter() {
+        var base = window.location.pathname + '?';
+        var params = [];
+        var search = document.getElementById('search');
+        if (search && search.value) params.push('search=' + encodeURIComponent(search.value));
+        params.push('sort_by=' + document.getElementById('sort_by').value);
+        params.push('sort_dir=' + document.getElementById('sort_dir').value);
+        if (dateFrom.value) params.push('date_from=' + dateFrom.value);
+        if (dateTo.value) params.push('date_to=' + dateTo.value);
+        window.location.href = base + params.join('&');
+    }
+
+    dateFrom.addEventListener('change', applyDateFilter);
+    dateTo.addEventListener('change', applyDateFilter);
+})();
 
 // Sort controls (separate from search — only runs on select change)
 (function () {

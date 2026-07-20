@@ -79,6 +79,21 @@
         <label for="search">Search equipment or customer</label>
         <input id="search" type="search" placeholder="Equipment ID, item name, customer, or phone" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
+    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
+        <label for="date_from">Checked Out From</label>
+        <input id="date_from" type="date" value="{{ date_from }}" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
+    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
+        <label for="date_to">Checked Out To</label>
+        <input id="date_to" type="date" value="{{ date_to }}" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
+</div>
+
+<div class="tab-bar" style="margin-bottom: 15px;">
+    <button class="tab-btn" data-tab="all">All (<span id="countAll">0</span>)</button>
+    <button class="tab-btn active" data-tab="checked_out">Checked Out (<span id="countCheckedOut">0</span>)</button>
+    <button class="tab-btn" data-tab="available">Available (<span id="countAvailable">0</span>)</button>
+    <button class="tab-btn" data-tab="overdue">Overdue (<span id="countOverdue">0</span>)</button>
 </div>
 
 <table id="masterTable">
@@ -95,7 +110,16 @@
     </thead>
     <tbody>
         {% for item in rows %}
-        <tr class="master-row"
+        {% set ns = namespace(status='available') %}
+        {% if item.checked_out_date %}
+            {% if item.due_date and item.due_date < today_str %}
+                {% set ns.status = 'overdue' %}
+            {% else %}
+                {% set ns.status = 'checked_out' %}
+            {% endif %}
+        {% endif %}
+        <tr class="master-row{% if ns.status == 'overdue' %} overdue-row{% endif %}"
+            data-status="{{ ns.status }}"
             data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }}"
             data-equipment-id="{{ item.equipment_id }}"
             data-item-name="{{ item.item_name }}"
@@ -135,12 +159,84 @@
 <p id="noResults" style="display:none; margin-top:20px;">No equipment matches your search.</p>
 
 <script>
-// Live search
-document.addEventListener('DOMContentLoaded', function () {
-    if (typeof initTableSearch === 'function') {
-        initTableSearch({ inputId: 'search', rowSelector: '.master-row', noResultsId: 'noResults' });
+// Combined tab + search filtering
+(function () {
+    var rows = Array.from(document.querySelectorAll('.master-row'));
+    var tabBtns = document.querySelectorAll('.tab-btn');
+    var searchInput = document.getElementById('search');
+    var noResults = document.getElementById('noResults');
+    var activeTab = 'checked_out';
+
+    function updateCounts() {
+        var counts = { all: 0, checked_out: 0, available: 0, overdue: 0 };
+        rows.forEach(function (r) {
+            counts.all++;
+            var s = r.getAttribute('data-status');
+            if (counts[s] !== undefined) counts[s]++;
+        });
+        document.getElementById('countAll').textContent = counts.all;
+        document.getElementById('countCheckedOut').textContent = counts.checked_out;
+        document.getElementById('countAvailable').textContent = counts.available;
+        document.getElementById('countOverdue').textContent = counts.overdue;
     }
-});
+
+    function applyFilters() {
+        var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        var visible = 0;
+        rows.forEach(function (r) {
+            var tabMatch = activeTab === 'all' || r.getAttribute('data-status') === activeTab;
+            var searchMatch = !query || (r.getAttribute('data-search-text') || '').indexOf(query) !== -1;
+            var show = tabMatch && searchMatch;
+            r.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (noResults) noResults.style.display = (visible === 0 && query) ? 'block' : 'none';
+    }
+
+    tabBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            activeTab = this.getAttribute('data-tab');
+            tabBtns.forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            applyFilters();
+        });
+    });
+
+    if (searchInput) {
+        var rafPending = false;
+        searchInput.addEventListener('input', function () {
+            if (!rafPending) {
+                rafPending = true;
+                requestAnimationFrame(function () { rafPending = false; applyFilters(); });
+            }
+        });
+    }
+
+    updateCounts();
+    applyFilters();
+})();
+
+// Date range auto-apply
+(function () {
+    var dateFrom = document.getElementById('date_from');
+    var dateTo = document.getElementById('date_to');
+    if (!dateFrom || !dateTo) return;
+
+    function applyDateFilter() {
+        var base = window.location.pathname + '?';
+        var params = [];
+        var search = document.getElementById('search');
+        if (search && search.value) params.push('search=' + encodeURIComponent(search.value));
+        params.push('sort_by={{ sort_by }}');
+        params.push('sort_dir={{ sort_dir }}');
+        if (dateFrom.value) params.push('date_from=' + dateFrom.value);
+        if (dateTo.value) params.push('date_to=' + dateTo.value);
+        window.location.href = base + params.join('&');
+    }
+
+    dateFrom.addEventListener('change', applyDateFilter);
+    dateTo.addEventListener('change', applyDateFilter);
+})();
 
 // Column sort
 (function () {

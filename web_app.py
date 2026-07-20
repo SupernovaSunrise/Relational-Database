@@ -1,4 +1,11 @@
+import os
+import sys
+import argparse
+import logging
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from db import *
 import sqlite3
 import re
 from datetime import datetime, timedelta
@@ -12,9 +19,7 @@ except Exception:
     load_workbook = None
     Font = PatternFill = Alignment = None
     HAVE_OPENPYXL = False
-
 from io import BytesIO
-import os
 try:
     import pandas as pd
     HAVE_PANDAS = True
@@ -23,255 +28,202 @@ except Exception:
     HAVE_PANDAS = False
 import base64
 
-app = Flask(__name__)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-here')  # Change this in production
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+log = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent / "database.db"
-CHECKOUT_PERIOD_DAYS = 120
+app = Flask(__name__)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(24).hex()
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+try:
+    from flask_wtf.csrf import CSRFProtect
+    csrf = CSRFProtect(app)
+except ImportError:
+    csrf = None
+    log.warning("Flask-WTF not installed; CSRF protection disabled")
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message_category = 'error'
+
 SEARCH_RATE_LIMIT = 20
 SEARCH_RATE_PERIOD = 10
 search_request_log = {}
 SEARCH_API_KEY = os.environ.get('EQUIPMENT_SEARCH_API_KEY')
 
-EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z]{2}-\d{4}$")
 
-def normalize_phone(phone):
-    digits = re.sub(r"\D", "", str(phone or ""))
-    if len(digits) == 11 and digits.startswith("1"):
-        digits = digits[1:]
-    return digits
-
-
-def format_phone(phone):
-    digits = normalize_phone(phone)
-    if len(digits) != 10:
-        return phone
-    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+class User(UserMixin):
+    def __init__(self, id, username, is_admin):
+        self.id = id
+        self.username = username
+        self.is_admin = is_admin
 
 
-def normalize_date_input(value):
-    if value is None:
-        return ''
-    text = str(value).strip()
-    if not text:
-        return ''
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
-        return text
-    if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", text):
-        month, day, year = [int(part) for part in text.split('/')]
-        return datetime(year, month, day).date().isoformat()
-    if re.fullmatch(r"\d{4}/\d{2}/\d{2}", text):
-        year, month, day = [int(part) for part in text.split('/')]
-        return datetime(year, month, day).date().isoformat()
-    return text
-
-
-def calculate_due_date(checkout_date, checkout_period_days=CHECKOUT_PERIOD_DAYS):
-    normalized = normalize_date_input(checkout_date)
-    if not normalized:
-        return ''
-    try:
-        parsed = datetime.strptime(normalized, "%Y-%m-%d").date()
-    except ValueError:
-        return ''
-    return (parsed + timedelta(days=checkout_period_days)).isoformat()
-
-
-def customer_phone_exists(phone_digits, cursor, exclude_id=None):
-    if not phone_digits:
-        return False
-    cursor.execute("SELECT id, phone FROM customers")
-    for row in cursor.fetchall():
-        existing_digits = normalize_phone(row["phone"])
-        if existing_digits == phone_digits and (exclude_id is None or row["id"] != exclude_id):
-            return True
-    return False
-
-
-def connect_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
+@login_manager.user_loader
+def load_user(user_id):
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS customers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            zip_code TEXT NOT NULL,
-            date_added TEXT NOT NULL DEFAULT CURRENT_DATE
-        )
-        """
-    )
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS equipment (
-            equipment_id TEXT PRIMARY KEY,
-            item_name TEXT NOT NULL
-        )
-        """
-    )
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS loans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_id INTEGER NOT NULL,
-            equipment_id TEXT NOT NULL,
-            checked_out_date TEXT NOT NULL,
-            due_date TEXT NOT NULL,
-            returned_date TEXT,
-            FOREIGN KEY(customer_id) REFERENCES customers(id),
-            FOREIGN KEY(equipment_id) REFERENCES equipment(equipment_id)
-        )
-        """
-    )
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS checkout_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_zip_code TEXT NOT NULL,
-            item_name TEXT NOT NULL,
-            equipment_id TEXT NOT NULL,
-            checkout_date TEXT NOT NULL,
-            is_first_item INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY(equipment_id) REFERENCES equipment(equipment_id)
-        )
-        """
-    )
-    conn.commit()
-    cursor.execute("PRAGMA table_info(customers)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if "date_added" not in columns:
-        cursor.execute("ALTER TABLE customers ADD COLUMN date_added TEXT")
-        cursor.execute("UPDATE customers SET date_added = date('now') WHERE date_added IS NULL")
-        conn.commit()
-
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_equipment_item_name ON equipment(item_name)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_equipment_status ON loans(equipment_id, returned_date)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_loans_customer_status ON loans(customer_id, returned_date)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_checkout_log_date ON checkout_log(checkout_date)")
-    cursor.execute("PRAGMA table_info(loans)")
-    loan_columns = [column[1] for column in cursor.fetchall()]
-    if "agreement_data" not in loan_columns:
-        cursor.execute("ALTER TABLE loans ADD COLUMN agreement_data TEXT")
-    if "agreement_date" not in loan_columns:
-        cursor.execute("ALTER TABLE loans ADD COLUMN agreement_date TEXT")
-    if "agreement_pending" not in loan_columns:
-        cursor.execute("ALTER TABLE loans ADD COLUMN agreement_pending INTEGER NOT NULL DEFAULT 0")
-    
-    # Create agreements table
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS customer_agreements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_id INTEGER NOT NULL,
-            loan_id INTEGER,
-            waiver_agreed INTEGER DEFAULT 0,
-            digital_signature_agreed INTEGER DEFAULT 0,
-            signature_data TEXT,
-            agreed_date TEXT NOT NULL,
-            FOREIGN KEY(customer_id) REFERENCES customers(id),
-            FOREIGN KEY(loan_id) REFERENCES loans(id)
-        )
-        """
-    )
-    
-    # Create deleted items audit log table
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS deleted_items_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            equipment_id TEXT NOT NULL,
-            item_name TEXT NOT NULL,
-            deletion_date TEXT NOT NULL
-        )
-        """
-    )
-    
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_items_date ON deleted_items_log(deletion_date)")
-    
-    cursor.execute("PRAGMA table_info(equipment)")
-    equip_columns = [column[1] for column in cursor.fetchall()]
-    if "date_verified" not in equip_columns:
-        cursor.execute("ALTER TABLE equipment ADD COLUMN date_verified TEXT")
-        conn.commit()
-
-    cursor.execute("PRAGMA table_info(checkout_log)")
-    log_columns = [column[1] for column in cursor.fetchall()]
-    if "is_first_item" not in log_columns:
-        cursor.execute("ALTER TABLE checkout_log ADD COLUMN is_first_item INTEGER NOT NULL DEFAULT 0")
-        conn.commit()
-
-    # Reformat existing stored customer phone numbers to the standard display format.
-    cursor.execute("SELECT id, phone FROM customers")
-    for row in cursor.fetchall():
-        formatted = format_phone(row["phone"])
-        if formatted != row["phone"]:
-            cursor.execute("UPDATE customers SET phone = ? WHERE id = ?", (formatted, row["id"]))
-    
-    cursor.execute("PRAGMA table_info(equipment)")
-    equip_columns = [column[1] for column in cursor.fetchall()]
-    if "date_verified" not in equip_columns:
-        cursor.execute("ALTER TABLE equipment ADD COLUMN date_verified TEXT")
-        conn.commit()
-
-    cursor.execute("PRAGMA table_info(checkout_log)")
-    log_columns = [column[1] for column in cursor.fetchall()]
-    if "is_first_item" not in log_columns:
-        cursor.execute("ALTER TABLE checkout_log ADD COLUMN is_first_item INTEGER NOT NULL DEFAULT 0")
-        conn.commit()
-    
+    cursor.execute("SELECT id, username, is_admin FROM users WHERE id = ?", (int(user_id),))
+    row = cursor.fetchone()
     conn.close()
-
-def find_customer_matches(customer_reference):
-    conn = connect_db()
-    cursor = conn.cursor()
-
-    search_pattern = f"%{customer_reference}%"
-    normalized_search = normalize_phone(customer_reference)
-    if customer_reference.isdigit() and len(customer_reference) <= 6:
-        cursor.execute(
-            "SELECT id, name, phone, zip_code FROM customers WHERE id = ?",
-            (customer_reference,),
-        )
-        rows = cursor.fetchall()
-        if rows:
-            conn.close()
-            return rows
-
-    query = (
-        "SELECT id, name, phone, zip_code FROM customers "
-        "WHERE LOWER(name) LIKE ? OR phone LIKE ? OR zip_code LIKE ? "
-    )
-    params = [search_pattern, search_pattern, search_pattern]
-    if normalized_search:
-        query += "OR REPLACE(REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-',''),' ','') LIKE ? "
-        params.append(f"%{normalized_search}%")
-    query += "ORDER BY name LIMIT 20"
-    cursor.execute(query, tuple(params))
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
-
-def resolve_customer_reference(customer_reference):
-    matches = find_customer_matches(customer_reference)
-    if not matches:
-        return None
-    if len(matches) == 1:
-        return matches[0]["id"]
+    if row:
+        return User(row['id'], row['username'], row['is_admin'])
     return None
+
+
+@app.before_request
+def check_first_run():
+    if request.endpoint in ('login', 'register', 'static', None):
+        return
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) AS cnt FROM users")
+    row = cursor.fetchone()
+    conn.close()
+    if row['cnt'] == 0:
+        return redirect(url_for('register'))
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    return response
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('master_control'))
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) AS cnt FROM users")
+    row = cursor.fetchone()
+    conn.close()
+    if row['cnt'] == 0:
+        return redirect(url_for('register'))
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password_hash, is_admin FROM users WHERE username = ?", (username,))
+        user_row = cursor.fetchone()
+        conn.close()
+        if user_row and check_password_hash(user_row['password_hash'], password):
+            user = User(user_row['id'], user_row['username'], user_row['is_admin'])
+            login_user(user)
+            flash('Logged in successfully.')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('master_control'))
+        flash('Invalid username or password.')
+    return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.')
+    return redirect(url_for('login'))
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) AS cnt FROM users")
+    row = cursor.fetchone()
+    user_count = row['cnt']
+    conn.close()
+    is_public = user_count == 0
+    if not is_public and (not current_user.is_authenticated or not current_user.is_admin):
+        flash('Only administrators can register new users.')
+        return redirect(url_for('master_control'))
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
+        if not username or not password:
+            flash('Username and password are required.')
+            return redirect(url_for('register'))
+        if len(username) < 3:
+            flash('Username must be at least 3 characters.')
+            return redirect(url_for('register'))
+        if len(password) < 8:
+            flash('Password must be at least 8 characters.')
+            return redirect(url_for('register'))
+        if password != confirm:
+            flash('Passwords do not match.')
+            return redirect(url_for('register'))
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        if cursor.fetchone():
+            conn.close()
+            flash('Username already exists.')
+            return redirect(url_for('register'))
+        is_admin = 1 if user_count == 0 else 0
+        cursor.execute(
+            "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)",
+            (username, generate_password_hash(password), is_admin),
+        )
+        conn.commit()
+        conn.close()
+        flash('Account created successfully. Please log in.')
+        return redirect(url_for('login'))
+    return render_template('register.html')
+
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        current_password = request.form.get('current_password', '')
+        new_password = request.form.get('new_password', '')
+        confirm = request.form.get('confirm_password', '')
+        if not current_password or not new_password:
+            flash('All fields are required.')
+            return redirect(url_for('change_password'))
+        if new_password != confirm:
+            flash('New passwords do not match.')
+            return redirect(url_for('change_password'))
+        if len(new_password) < 8:
+            flash('New password must be at least 8 characters.')
+            return redirect(url_for('change_password'))
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT password_hash FROM users WHERE id = ?", (current_user.id,))
+        row = cursor.fetchone()
+        if not row or not check_password_hash(row['password_hash'], current_password):
+            conn.close()
+            flash('Current password is incorrect.')
+            return redirect(url_for('change_password'))
+        cursor.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(new_password), current_user.id),
+        )
+        conn.commit()
+        conn.close()
+        flash('Password changed successfully.')
+        return redirect(url_for('master_control'))
+    return render_template('change_password.html')
+
 
 @app.route('/')
 def index():
     return redirect(url_for('master_control'))
 
+
 @app.route('/master', methods=['GET', 'POST'])
+@login_required
 def master_control():
     checkout_candidates = None
     pending_equipment_ids = []
@@ -357,7 +309,6 @@ def master_control():
                 flash('Please select at least one piece of equipment.')
                 return redirect(url_for('master_control'))
 
-            # No customer reference — create a placeholder and collect info on the agreement form
             if not customer_reference:
                 conn = connect_db()
                 cursor = conn.cursor()
@@ -496,10 +447,10 @@ def master_control():
         params.append(date_to)
     query += "LEFT JOIN customers ON loans.customer_id = customers.id "
     if search:
-        search_pattern = f"%{search}%"
+        search_pattern = f"%{escape_like(search)}%"
         query += (
-            "WHERE equipment.equipment_id LIKE ? OR equipment.item_name LIKE ? "
-            "OR customers.name LIKE ? OR customers.phone LIKE ? "
+            "WHERE equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\' "
+            "OR customers.name LIKE ? ESCAPE '\\' OR customers.phone LIKE ? ESCAPE '\\' "
         )
         params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
     query += f"ORDER BY {sort_column} {sort_direction}"
@@ -531,7 +482,9 @@ def master_control():
         available_equipment=available_equipment,
     )
 
+
 @app.route('/customers')
+@login_required
 def customers():
     search = request.args.get('search', '').strip()
     conn = connect_db()
@@ -543,10 +496,10 @@ def customers():
         "FROM customers "
     )
     if search:
-        search_pattern = f"%{search}%"
+        search_pattern = f"%{escape_like(search)}%"
         cursor.execute(
             customer_query +
-            "WHERE name LIKE ? OR phone LIKE ? OR zip_code LIKE ? "
+            "WHERE name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR zip_code LIKE ? ESCAPE '\\' "
             "ORDER BY name",
             (search_pattern, search_pattern, search_pattern),
         )
@@ -556,7 +509,9 @@ def customers():
     conn.close()
     return render_template('customers.html', customers=customers_list, search=search)
 
+
 @app.route('/add_customer', methods=['GET', 'POST'])
+@login_required
 def add_customer():
     if request.method == 'POST':
         name = request.form['name'].strip()
@@ -601,7 +556,9 @@ def add_customer():
 
     return render_template('add_customer.html')
 
+
 @app.route('/equipment')
+@login_required
 def equipment():
     search = request.args.get('search', '').strip()
     conn = connect_db()
@@ -615,10 +572,10 @@ def equipment():
     )
     params = ()
     if search:
-        search_pattern = f"%{search}%"
+        search_pattern = f"%{escape_like(search)}%"
         query += (
-            "WHERE equipment.equipment_id LIKE ? OR equipment.item_name LIKE ? "
-            "OR customers.name LIKE ? "
+            "WHERE equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\' "
+            "OR customers.name LIKE ? ESCAPE '\\' "
         )
         params = (search_pattern, search_pattern, search_pattern)
     query += "ORDER BY equipment.equipment_id"
@@ -627,7 +584,9 @@ def equipment():
     conn.close()
     return render_template('equipment.html', equipment=equipment_list, search=search)
 
+
 @app.route('/add_equipment', methods=['GET', 'POST'])
+@login_required
 def add_equipment():
     if request.method == 'POST':
         equipment_id = request.form['equipment_id'].strip().upper()
@@ -659,7 +618,9 @@ def add_equipment():
 
     return render_template('add_equipment.html')
 
+
 @app.route('/delete_customer/<int:customer_id>', methods=['POST'])
+@login_required
 def delete_customer(customer_id):
     search = request.form.get('search', '').strip()
     conn = connect_db()
@@ -679,7 +640,9 @@ def delete_customer(customer_id):
     flash('Customer deleted successfully.')
     return redirect(url_for('customers'))
 
+
 @app.route('/delete_equipment/<equipment_id>', methods=['POST'])
+@login_required
 def delete_equipment(equipment_id):
     search = request.form.get('search', '').strip()
     conn = connect_db()
@@ -693,40 +656,28 @@ def delete_equipment(equipment_id):
         flash('Cannot delete equipment while it is checked out.')
         return redirect(url_for('equipment', search=search))
 
-    # Get item name before deleting
     cursor.execute("SELECT item_name FROM equipment WHERE equipment_id = ?", (equipment_id,))
     row = cursor.fetchone()
     item_name = row["item_name"] if row else equipment_id
-    
-    # Log the deleted item
+
     cursor.execute(
         "INSERT INTO deleted_items_log (equipment_id, item_name, deletion_date) VALUES (?, ?, ?)",
         (equipment_id, item_name, datetime.today().date().isoformat()),
     )
-    
+
     cursor.execute("DELETE FROM equipment WHERE equipment_id = ?", (equipment_id,))
     conn.commit()
     conn.close()
     flash('Equipment deleted successfully.')
     return redirect(url_for('equipment', search=search))
 
-@app.route('/checkout', methods=['GET', 'POST'])
-def checkout():
-    return redirect(url_for('master_control'))
-
-@app.route('/return_equipment', methods=['GET', 'POST'])
-def return_equipment():
-    return redirect(url_for('master_control'))
-
-@app.route('/checked_out')
-def checked_out():
-    return redirect(url_for('master_control'))
 
 @app.route('/settings', methods=['GET', 'POST'])
+@login_required
 def settings():
     if request.method == 'POST':
         action = request.form.get('action')
-        
+
         if action == 'import_customers':
             if 'file' not in request.files:
                 flash('No file part')
@@ -741,7 +692,6 @@ def settings():
                     cursor = conn.cursor()
                     count = 0
                     if file.filename.endswith('.xls'):
-                        # use pandas for old .xls files
                         if not HAVE_PANDAS:
                             flash('Pandas is not available on the server; cannot import .xls files. Install pandas.')
                         else:
@@ -780,11 +730,12 @@ def settings():
                     conn.close()
                     flash(f'Imported {count} new customers successfully.')
                 except Exception as e:
-                    flash(f'Error importing file: {str(e)}')
+                    log.exception("Error importing file")
+                    flash('An error occurred while importing the file. Please check the format and try again.')
             else:
                 flash('File must be .xlsx or .xls format')
             return redirect(url_for('settings'))
-        
+
         elif action == 'import_equipment':
             if 'file' not in request.files:
                 flash('No file part')
@@ -841,21 +792,21 @@ def settings():
                     conn.close()
                     flash(f'Imported {count} new equipment items successfully.')
                 except Exception as e:
-                    flash(f'Error importing file: {str(e)}')
+                    log.exception("Error importing file")
+                    flash('An error occurred while importing the file. Please check the format and try again.')
             else:
                 flash('File must be .xlsx or .xls format')
             return redirect(url_for('settings'))
-        
+
         elif action == 'export':
             export_type = request.form.get('export_type')
             conn = connect_db()
             cursor = conn.cursor()
-            
+
             if export_type == 'customers':
                 cursor.execute("SELECT id, name, phone, zip_code, date_added FROM customers ORDER BY id")
                 rows = cursor.fetchall()
                 conn.close()
-                # Prefer XLSX if openpyxl available, otherwise export CSV
                 if HAVE_OPENPYXL:
                     wb = Workbook()
                     ws = wb.active
@@ -873,7 +824,6 @@ def settings():
                     output.seek(0)
                     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='customers_export.xlsx')
                 else:
-                    # Fallback CSV
                     import csv
                     output = BytesIO()
                     writer = csv.writer(output)
@@ -882,7 +832,7 @@ def settings():
                         writer.writerow([row['id'], row['name'], row['phone'], row['zip_code'], row['date_added']])
                     output.seek(0)
                     return send_file(output, mimetype='text/csv', as_attachment=True, download_name='customers_export.csv')
-            
+
             elif export_type == 'equipment':
                 cursor.execute("SELECT equipment_id, item_name FROM equipment ORDER BY equipment_id")
                 rows = cursor.fetchall()
@@ -912,10 +862,12 @@ def settings():
                         writer.writerow([row['equipment_id'], row['item_name']])
                     output.seek(0)
                     return send_file(output, mimetype='text/csv', as_attachment=True, download_name='equipment_export.csv')
-    
+
     return render_template('settings.html')
 
+
 @app.route('/reports', methods=['GET', 'POST'])
+@login_required
 def reports():
     report_type = request.args.get('report_type', 'analytics')
     year_filter = request.args.get('year_filter', '')
@@ -946,7 +898,7 @@ def reports():
                 flash('Item sale log entry removed successfully.')
         conn.close()
         return redirect(url_for('reports', report_type=report_type, year_filter=year_filter, month_filter=month_filter, date_from=date_from, date_to=date_to))
-    
+
     conn = connect_db()
     cursor = conn.cursor()
 
@@ -1045,7 +997,6 @@ def reports():
                 'avg_items_per_day': row['total_items'] / active_days,
             })
 
-        # Summary totals
         cursor.execute(
             f"SELECT COUNT(DISTINCT customer_id || '_' || checked_out_date) AS total_guests, COUNT(*) AS total_checkouts, COUNT(DISTINCT checked_out_date) AS total_days FROM loans WHERE agreement_pending = 0 {year_clause}",
             params,
@@ -1059,7 +1010,6 @@ def reports():
                 'avg_per_day': summary_row['total_guests'] / total_days,
             }
 
-    # Available years always from loan checked out dates
     cursor.execute("SELECT DISTINCT strftime('%Y', checked_out_date) as year FROM loans WHERE agreement_pending = 0 ORDER BY year DESC")
     years = [row['year'] for row in cursor.fetchall() if row['year']]
     conn.close()
@@ -1080,7 +1030,9 @@ def reports():
         monthly_stats=monthly_stats,
     )
 
+
 @app.route('/customer_agreement/<int:customer_id>', methods=['GET', 'POST'])
+@login_required
 def customer_agreement(customer_id):
     conn = connect_db()
     cursor = conn.cursor()
@@ -1183,7 +1135,6 @@ def customer_agreement(customer_id):
             conn = connect_db()
             cursor = conn.cursor()
 
-            # If new_customer, save the customer data before adding equipment
             if new_customer:
                 new_name = request.form.get('add_equipment_new_name', '').strip()
                 new_phone = request.form.get('add_equipment_new_phone', '').strip()
@@ -1204,7 +1155,6 @@ def customer_agreement(customer_id):
                         (new_name, format_phone(new_phone) if new_phone else '', new_zip if new_zip else '00000', customer_id),
                     )
                     conn.commit()
-                    # Customer is now saved, so clear new_customer flag
                     new_customer = None
 
             cursor.execute("SELECT zip_code FROM customers WHERE id = ?", (customer_id,))
@@ -1267,12 +1217,11 @@ def customer_agreement(customer_id):
             return redirect(url_for('customer_agreement', **redirect_params))
 
         if action == 'save':
-            # If new_customer, update the placeholder with filled-in details
             if new_customer:
                 new_name = request.form.get('new_name', '').strip()
                 new_phone = request.form.get('new_phone', '').strip()
                 new_zip = request.form.get('new_zip', '').strip()
-                
+
                 if new_name:
                     digits = normalize_phone(new_phone) if new_phone else ''
                     if new_phone and len(digits) < 10:
@@ -1400,8 +1349,8 @@ def equipment_search():
         "WHERE loans.id IS NULL "
     )
     if q:
-        qpat = f"%{q}%"
-        query += "AND (equipment.equipment_id LIKE ? OR equipment.item_name LIKE ?) "
+        qpat = f"%{escape_like(q)}%"
+        query += "AND (equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\') "
         params.extend([qpat, qpat])
     query += "ORDER BY equipment.equipment_id LIMIT ?"
     params.append(limit)
@@ -1411,7 +1360,9 @@ def equipment_search():
     results = [{"equipment_id": r["equipment_id"], "item_name": r["item_name"]} for r in rows]
     return jsonify(results)
 
+
 @app.route('/agreement_view/<int:loan_id>')
+@login_required
 def agreement_view(loan_id):
     conn = connect_db()
     cursor = conn.cursor()
@@ -1428,6 +1379,7 @@ def agreement_view(loan_id):
 
 
 @app.route('/customer_agreement_view/<int:customer_id>')
+@login_required
 def customer_agreement_view(customer_id):
     search = request.args.get('search', '').strip()
     conn = connect_db()
@@ -1462,24 +1414,26 @@ def customer_agreement_view(customer_id):
         agreement_date=latest_agreement['agreement_date'],
     )
 
+
 @app.route('/inline_update', methods=['POST'])
+@login_required
 def inline_update():
     data = request.get_json()
     if not data:
         return jsonify({'error': 'Invalid request'}), 400
-    
+
     table = data.get('table')
     row_id = data.get('row_id')
     field = data.get('field')
     value = data.get('value')
-    
+
     if not all([table, row_id, field, value is not None]):
         return jsonify({'error': 'Missing required fields'}), 400
-    
+
     allowed_tables = {'loans', 'customers', 'equipment'}
     if table not in allowed_tables:
         return jsonify({'error': 'Invalid table'}), 400
-    
+
     allowed_fields = {
         'loans': {'checked_out_date', 'due_date', 'returned_date', 'equipment_id', 'item_name'},
         'customers': {'name', 'phone', 'zip_code'},
@@ -1487,7 +1441,7 @@ def inline_update():
     }
     if field not in allowed_fields.get(table, set()):
         return jsonify({'error': 'Invalid field'}), 400
-    
+
     try:
         conn = connect_db()
         cursor = conn.cursor()
@@ -1516,8 +1470,43 @@ def inline_update():
         conn.close()
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        log.exception("Inline update error")
+        return jsonify({'error': 'An internal error occurred.'}), 500
+
 
 if __name__ == '__main__':
-    init_db()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--blank', action='store_true', help='Delete existing database and create a fresh blank one')
+    parser.add_argument('--port', type=int, default=5000)
+    args = parser.parse_args()
+
+    if args.blank:
+        blank_db()
+    else:
+        init_db()
+
+    admin_user = os.environ.get('ADMIN_USERNAME')
+    admin_pass = os.environ.get('ADMIN_PASSWORD')
+    if admin_user and admin_pass:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE username = ?", (admin_user,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, 1)",
+                (admin_user, generate_password_hash(admin_pass)),
+            )
+            conn.commit()
+            log.info("Auto-created admin user: %s", admin_user)
+        conn.close()
+
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    ssl_certfile = os.environ.get('SSL_CERTFILE')
+    ssl_keyfile = os.environ.get('SSL_KEYFILE')
+    ssl_context = None
+    if ssl_certfile and ssl_keyfile:
+        ssl_context = (ssl_certfile, ssl_keyfile)
+        log.info("TLS enabled with cert=%s", ssl_certfile)
+
+    log.info("Starting DME Checkout app on port %d (debug=%s)", args.port, debug)
+    app.run(debug=debug, host='0.0.0.0', port=args.port, ssl_context=ssl_context)

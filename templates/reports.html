@@ -281,6 +281,7 @@
                     <td>{{ item.customer_zip_code }}</td>
                     <td>
                         <form method="post" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="action" value="delete_checkout">
                             <input type="hidden" name="checkout_id" value="{{ item.id }}">
                             <input type="hidden" name="report_type" value="{{ report_type }}">
@@ -297,6 +298,7 @@
                     <td>{{ item.item_name }}</td>
                     <td>
                         <form method="post" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="action" value="delete_item_sale">
                             <input type="hidden" name="item_sale_id" value="{{ item.id }}">
                             <input type="hidden" name="report_type" value="{{ report_type }}">

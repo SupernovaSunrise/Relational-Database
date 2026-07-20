@@ -68,6 +68,7 @@
     <div class="mt-4 no-print" style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
       <h5>Add Additional Equipment</h5>
       <form method="post" id="addEquipmentForm" onsubmit="return copyCustomerDataToAddEquipmentForm();">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="add_equipment">
         <input type="hidden" name="checkout_date" id="add_equipment_checkout_date">
         {% if loan_ids %}
@@ -223,6 +224,7 @@
     <p>I understand that if I am an Occupational Therapist/Physical Therapist, I am also responsible for the equipment out on loan. In either getting the equipment returned or paid for by the due date.</p>
 
     <form method="post" onsubmit="prepareSignature()">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="signature_data" id="signature_data">
       <input type="hidden" name="checkout_date" id="save_checkout_date">
       {% if new_customer %}
@@ -306,9 +308,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
 let agreementSubmitting = false;
 
+function getCsrfToken() {
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute('content') : '';
+}
+
 function pendingCheckoutCancellation() {
   if (!agreementLoanIds && !agreementLoanId) return null;
   const cancellation = new FormData();
+  cancellation.append('csrf_token', getCsrfToken());
   cancellation.append('action', 'cancel');
   if (agreementLoanIds) cancellation.append('loan_ids', agreementLoanIds);
   if (agreementLoanId) cancellation.append('loan_id', agreementLoanId);

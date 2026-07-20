@@ -7,17 +7,59 @@
     @media print {
         body {
             background-color: white;
-            padding: 0;
+            padding: 10px;
+            margin: 0;
         }
         .container {
             box-shadow: none;
             max-width: 100%;
+            padding: 0;
         }
         nav, .report-filters, .print-button, .guest-month-filter {
-            display: none;
+            display: none !important;
         }
         table {
             page-break-inside: avoid;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px 10px;
+            border: 1px solid #999;
+        }
+        th {
+            background-color: #eee !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        th:has(> button),
+        td:has(> form) {
+            display: none !important;
+        }
+        .analytics-box {
+            border: 1px solid #ccc;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+            break-inside: avoid;
+        }
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .analytics-stat {
+            border: 1px solid #ccc;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .analytics-stat-value {
+            color: #007bff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        h1, h2, h3 {
+            color: #333;
         }
     }
     .report-filters {

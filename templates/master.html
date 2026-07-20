@@ -21,6 +21,7 @@
                 <td>{{ customer.zip_code }}</td>
                 <td>
                     <form method="POST" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="checkout">
                         {% for equipment_id in pending_equipment_ids %}
                         <input type="hidden" name="equipment_ids" value="{{ equipment_id }}">
@@ -40,6 +41,7 @@
     <section style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
         <h2>Add Customer</h2>
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="add_customer">
             <div class="form-group">
                 <label for="customer_name">Name</label>
@@ -60,6 +62,7 @@
     <section style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
         <h2>Add Equipment</h2>
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="add_equipment">
             <div class="form-group">
                 <label for="master_equipment_id_input">Equipment ID</label>
@@ -89,11 +92,25 @@
     </div>
 </div>
 
+{% set ns_count = namespace(all=0, checked_out=0, available=0, overdue=0) %}
+{% for item in rows %}
+    {% set ns_count.all = ns_count.all + 1 %}
+    {% if item.checked_out_date %}
+        {% if item.due_date and item.due_date < today_str %}
+            {% set ns_count.overdue = ns_count.overdue + 1 %}
+        {% else %}
+            {% set ns_count.checked_out = ns_count.checked_out + 1 %}
+        {% endif %}
+    {% else %}
+        {% set ns_count.available = ns_count.available + 1 %}
+    {% endif %}
+{% endfor %}
+
 <div class="tab-bar" style="margin-bottom: 15px;">
-    <button class="tab-btn" data-tab="all">All (<span id="countAll">0</span>)</button>
-    <button class="tab-btn active" data-tab="checked_out">Checked Out (<span id="countCheckedOut">0</span>)</button>
-    <button class="tab-btn" data-tab="available">Available (<span id="countAvailable">0</span>)</button>
-    <button class="tab-btn" data-tab="overdue">Overdue (<span id="countOverdue">0</span>)</button>
+    <button class="tab-btn" data-tab="all">All ({{ ns_count.all }})</button>
+    <button class="tab-btn active" data-tab="checked_out">Checked Out ({{ ns_count.checked_out }})</button>
+    <button class="tab-btn" data-tab="available">Available ({{ ns_count.available }})</button>
+    <button class="tab-btn" data-tab="overdue">Overdue ({{ ns_count.overdue }})</button>
 </div>
 
 <table id="masterTable">
@@ -119,6 +136,7 @@
             {% endif %}
         {% endif %}
         <tr class="master-row{% if ns.status == 'overdue' %} overdue-row{% endif %}"
+            style="{% if ns.status != 'checked_out' and ns.status != 'overdue' %}display:none{% endif %}"
             data-status="{{ ns.status }}"
             data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }}"
             data-equipment-id="{{ item.equipment_id }}"
@@ -139,12 +157,14 @@
                         <a class="btn" href="{{ url_for('customer_agreement_view', customer_id=item.customer_id) }}">View Agreement</a>
                     {% endif %}
                     <form method="POST" style="display:inline; margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="return">
                         <input type="hidden" name="loan_id" value="{{ item.loan_id }}">
                         <button type="submit" class="btn btn-danger">Return</button>
                     </form>
                 {% else %}
                     <form method="POST" style="display:flex; gap:6px; align-items:center; margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="checkout">
                         <input type="hidden" name="equipment_id" value="{{ item.equipment_id }}">
                         <input name="customer_reference" type="text" placeholder="Customer ID, Name, Phone (optional)" style="flex:1; min-width:140px; padding:6px; border:1px solid #ddd; border-radius:4px;">
@@ -166,19 +186,6 @@
     var searchInput = document.getElementById('search');
     var noResults = document.getElementById('noResults');
     var activeTab = 'checked_out';
-
-    function updateCounts() {
-        var counts = { all: 0, checked_out: 0, available: 0, overdue: 0 };
-        rows.forEach(function (r) {
-            counts.all++;
-            var s = r.getAttribute('data-status');
-            if (counts[s] !== undefined) counts[s]++;
-        });
-        document.getElementById('countAll').textContent = counts.all;
-        document.getElementById('countCheckedOut').textContent = counts.checked_out;
-        document.getElementById('countAvailable').textContent = counts.available;
-        document.getElementById('countOverdue').textContent = counts.overdue;
-    }
 
     function applyFilters() {
         var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
@@ -212,7 +219,7 @@
         });
     }
 
-    updateCounts();
+    applyFilters();
     applyFilters();
 })();
 

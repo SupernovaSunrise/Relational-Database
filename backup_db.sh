@@ -3,7 +3,7 @@
 # Runs daily to create timestamped backups
 
 BACKUP_DIR="/app/backups"
-DB_FILE="/app/database.db"
+DB_FILE="${DB_PATH:-/app/data/database.db}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="$BACKUP_DIR/database_${TIMESTAMP}.db"
 

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Equipment Checkout Database{% endblock %}</title>
     <style>
         body {
@@ -143,6 +144,17 @@
         <a href="{{ url_for('equipment') }}">Equipment</a>
         <a href="{{ url_for('reports') }}">Reports</a>
         <a href="{{ url_for('settings') }}">Settings</a>
+        {% if current_user.is_authenticated %}
+        <span style="float: right; color: white; line-height: 30px; margin-right: 10px;">
+            {{ current_user.username }}
+            <a href="{{ url_for('change_password') }}" style="margin-left: 10px;">Change Password</a>
+            <a href="{{ url_for('logout') }}" style="margin-left: 10px;">Logout</a>
+        </span>
+        {% else %}
+        <span style="float: right; line-height: 30px; margin-right: 10px;">
+            <a href="{{ url_for('login') }}">Login</a>
+        </span>
+        {% endif %}
     </nav>
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -224,9 +236,11 @@
         const CHECKOUT_PERIOD_DAYS = 120;
 
         function saveCell(cell, rowId, field, table, newValue, originalValue) {
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
             fetch('/inline_update', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                 body: JSON.stringify({ table: table, row_id: rowId, field: field, value: newValue })
             })
             .then(function(response) {

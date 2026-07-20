@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import re
 import sys
@@ -7,9 +8,10 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent / "database.db"
 if getattr(sys, 'frozen', False):
     DB_PATH = Path(sys.executable).parent / "database.db"
+else:
+    DB_PATH = Path(os.environ.get('DB_PATH', str(Path(__file__).parent / "database.db")))
 
 CHECKOUT_PERIOD_DAYS = 120
 EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z]{2}-\d{4}$")

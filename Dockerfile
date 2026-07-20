@@ -10,6 +10,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY web_app.py .
 COPY templates/ ./templates/
 
+RUN mkdir -p /app/data
+
+RUN mkdir -p /app/data
+
 # Expose Flask port
 EXPOSE 5000
 

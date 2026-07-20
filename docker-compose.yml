@@ -4,10 +4,12 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./database.db:/app/database.db
+      - dme-data:/app/data
       - ./backups:/app/backups
     environment:
       - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - DB_PATH=/app/data/database.db
     restart: unless-stopped
     container_name: dme-checkout-app
     healthcheck:
@@ -26,3 +28,6 @@ services:
           target: /app/templates
         - action: rebuild
           path: ./requirements.txt
+
+volumes:
+  dme-data:

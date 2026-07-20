@@ -4,10 +4,14 @@
 
 {% block content %}
 <style>
+    @page {
+        size: letter;
+        margin: 0;
+    }
     @media print {
         body {
             background-color: white;
-            padding: 10px;
+            padding: 0.6in 0.75in;
             margin: 0;
         }
         .container {
@@ -32,8 +36,8 @@
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
-        th:has(> button),
-        td:has(> form) {
+        .container > table th:last-child,
+        .container > table td:last-child {
             display: none !important;
         }
         .analytics-box {

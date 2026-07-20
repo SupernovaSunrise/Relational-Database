@@ -461,11 +461,13 @@ def master_control():
         if checkout_candidates:
             pass
         else:
-            return redirect(url_for('master_control', search=request.args.get('search', ''), sort_by=request.args.get('sort_by', 'equipment_id'), sort_dir=request.args.get('sort_dir', 'asc')))
+            return redirect(url_for('master_control', search=request.args.get('search', ''), sort_by=request.args.get('sort_by', 'equipment_id'), sort_dir=request.args.get('sort_dir', 'asc'), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', '')))
 
     search = request.args.get('search', '').strip()
     sort_by = request.args.get('sort_by', 'equipment_id')
     sort_dir = request.args.get('sort_dir', 'asc')
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
     sort_options = {
         'equipment_id': 'equipment.equipment_id',
         'item_name': 'equipment.item_name',
@@ -484,16 +486,22 @@ def master_control():
         "customers.phone AS customer_phone, loans.id AS loan_id, loans.checked_out_date, loans.due_date, loans.agreement_data "
         "FROM equipment "
         "LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL AND loans.agreement_pending = 0 "
-        "LEFT JOIN customers ON loans.customer_id = customers.id "
     )
-    params = ()
+    params = list()
+    if date_from:
+        query += "AND loans.checked_out_date >= ? "
+        params.append(date_from)
+    if date_to:
+        query += "AND loans.checked_out_date <= ? "
+        params.append(date_to)
+    query += "LEFT JOIN customers ON loans.customer_id = customers.id "
     if search:
         search_pattern = f"%{search}%"
         query += (
             "WHERE equipment.equipment_id LIKE ? OR equipment.item_name LIKE ? "
             "OR customers.name LIKE ? OR customers.phone LIKE ? "
         )
-        params = (search_pattern, search_pattern, search_pattern, search_pattern)
+        params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
     query += f"ORDER BY {sort_column} {sort_direction}"
     cursor.execute(query, params)
     rows = cursor.fetchall()
@@ -506,12 +514,17 @@ def master_control():
     available_equipment = cursor.fetchall()
     conn.close()
 
+    today_str = datetime.today().date().isoformat()
+
     return render_template(
         'master.html',
         rows=rows,
         search=search,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        date_from=date_from,
+        date_to=date_to,
+        today_str=today_str,
         checkout_candidates=checkout_candidates,
         pending_equipment_ids=pending_equipment_ids,
         pending_customer_reference=pending_customer_reference,
@@ -703,78 +716,11 @@ def checkout():
 
 @app.route('/return_equipment', methods=['GET', 'POST'])
 def return_equipment():
-    if request.method == 'POST':
-        loan_id = request.form['loan_id']
-        search = request.form.get('search', '').strip()
-        sort_by = request.form.get('sort_by', 'due_date')
-        sort_dir = request.form.get('sort_dir', 'asc')
-
-        if not loan_id:
-            flash('Please select equipment to return.')
-            return redirect(url_for('return_equipment', search=search, sort_by=sort_by, sort_dir=sort_dir))
-
-        returned_date = datetime.today().date().isoformat()
-        conn = connect_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE loans SET returned_date = ?, agreement_data = NULL WHERE id = ?",
-            (returned_date, loan_id),
-        )
-        conn.commit()
-        conn.close()
-
-        flash('Equipment returned successfully.')
-        return redirect(url_for('return_equipment', search=search, sort_by=sort_by, sort_dir=sort_dir))
-
-    search = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort_by', 'due_date')
-    sort_dir = request.args.get('sort_dir', 'asc')
-    
-    sort_options = {
-        'equipment_id': 'loans.equipment_id',
-        'item_name': 'equipment.item_name',
-        'customer_name': 'customers.name',
-        'checked_out_date': 'loans.checked_out_date',
-        'due_date': 'loans.due_date',
-        'customer_zip': 'customers.zip_code',
-    }
-    sort_column = sort_options.get(sort_by, 'loans.due_date')
-    sort_direction = 'DESC' if sort_dir == 'desc' else 'ASC'
-    
-    conn = connect_db()
-    cursor = conn.cursor()
-    query = (
-        "SELECT loans.id, loans.customer_id, loans.equipment_id, equipment.item_name, customers.name, "
-        "customers.zip_code, loans.checked_out_date, loans.due_date, loans.agreement_data "
-        "FROM loans "
-        "JOIN equipment ON loans.equipment_id = equipment.equipment_id "
-        "JOIN customers ON loans.customer_id = customers.id "
-        "WHERE loans.returned_date IS NULL AND loans.agreement_pending = 0 "
-    )
-    params = ()
-    if search:
-        search_pattern = f"%{search}%"
-        query += (
-            "AND (loans.equipment_id LIKE ? OR equipment.item_name LIKE ? "
-            "OR customers.name LIKE ? OR customers.zip_code LIKE ?) "
-        )
-        params = (search_pattern, search_pattern, search_pattern, search_pattern)
-    query += f"ORDER BY {sort_column} {sort_direction}"
-    cursor.execute(query, params)
-    checked_out_list = cursor.fetchall()
-    conn.close()
-
-    return render_template(
-        'return_equipment.html',
-        checked_out=checked_out_list,
-        search=search,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-    )
+    return redirect(url_for('master_control'))
 
 @app.route('/checked_out')
 def checked_out():
-    return redirect(url_for('return_equipment'))
+    return redirect(url_for('master_control'))
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
@@ -971,15 +917,19 @@ def settings():
 
 @app.route('/reports', methods=['GET', 'POST'])
 def reports():
-    report_type = request.args.get('report_type', 'checkout')
+    report_type = request.args.get('report_type', 'analytics')
     year_filter = request.args.get('year_filter', '')
     month_filter = request.args.get('month_filter', '')
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
 
     if request.method == 'POST':
         action = request.form.get('action')
         report_type = request.form.get('report_type', report_type)
         year_filter = request.form.get('year_filter', year_filter)
         month_filter = request.form.get('month_filter', month_filter)
+        date_from = request.form.get('date_from', date_from).strip()
+        date_to = request.form.get('date_to', date_to).strip()
         conn = connect_db()
         cursor = conn.cursor()
         if action == 'delete_checkout':
@@ -995,7 +945,7 @@ def reports():
                 conn.commit()
                 flash('Item sale log entry removed successfully.')
         conn.close()
-        return redirect(url_for('reports', report_type=report_type, year_filter=year_filter, month_filter=month_filter))
+        return redirect(url_for('reports', report_type=report_type, year_filter=year_filter, month_filter=month_filter, date_from=date_from, date_to=date_to))
     
     conn = connect_db()
     cursor = conn.cursor()
@@ -1009,10 +959,16 @@ def reports():
 
     if report_type == 'checkout':
         query = "SELECT id, customer_zip_code, item_name, equipment_id, checkout_date, is_first_item FROM checkout_log WHERE 1=1"
-        params = ()
+        params = list()
         if year_filter:
             query += " AND strftime('%Y', checkout_date) = ?"
-            params = (year_filter,)
+            params.append(year_filter)
+        if date_from:
+            query += " AND checkout_date >= ?"
+            params.append(date_from)
+        if date_to:
+            query += " AND checkout_date <= ?"
+            params.append(date_to)
         query += " ORDER BY checkout_date DESC"
         cursor.execute(query, params)
         report_data = cursor.fetchall()
@@ -1020,10 +976,16 @@ def reports():
 
     elif report_type == 'item_sales':
         query = "SELECT id, equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1"
-        params = ()
+        params = list()
         if year_filter:
             query += " AND strftime('%Y', deletion_date) = ?"
-            params = (year_filter,)
+            params.append(year_filter)
+        if date_from:
+            query += " AND deletion_date >= ?"
+            params.append(date_from)
+        if date_to:
+            query += " AND deletion_date <= ?"
+            params.append(date_to)
         query += " ORDER BY deletion_date DESC"
         cursor.execute(query, params)
         report_data = cursor.fetchall()
@@ -1109,6 +1071,8 @@ def reports():
         report_title=report_title,
         year_filter=year_filter,
         month_filter=month_filter,
+        date_from=date_from,
+        date_to=date_to,
         years=years,
         analytics_months=analytics_months,
         analytics_summary=analytics_summary,
@@ -1459,7 +1423,7 @@ def agreement_view(loan_id):
     conn.close()
     if not agreement:
         flash('Agreement not found or no saved signature available.')
-        return redirect(url_for('return_equipment'))
+        return redirect(url_for('master_control'))
     return redirect(url_for('customer_agreement_view', customer_id=agreement['customer_id']))
 
 

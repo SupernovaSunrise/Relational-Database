@@ -716,90 +716,11 @@ def checkout():
 
 @app.route('/return_equipment', methods=['GET', 'POST'])
 def return_equipment():
-    if request.method == 'POST':
-        loan_id = request.form['loan_id']
-        search = request.form.get('search', '').strip()
-        sort_by = request.form.get('sort_by', 'due_date')
-        sort_dir = request.form.get('sort_dir', 'asc')
-        date_from = request.form.get('date_from', '').strip()
-        date_to = request.form.get('date_to', '').strip()
-
-        if not loan_id:
-            flash('Please select equipment to return.')
-            return redirect(url_for('return_equipment', search=search, sort_by=sort_by, sort_dir=sort_dir, date_from=date_from, date_to=date_to))
-
-        returned_date = datetime.today().date().isoformat()
-        conn = connect_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE loans SET returned_date = ?, agreement_data = NULL WHERE id = ?",
-            (returned_date, loan_id),
-        )
-        conn.commit()
-        conn.close()
-
-        flash('Equipment returned successfully.')
-        return redirect(url_for('return_equipment', search=search, sort_by=sort_by, sort_dir=sort_dir, date_from=date_from, date_to=date_to))
-
-    search = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort_by', 'due_date')
-    sort_dir = request.args.get('sort_dir', 'asc')
-    date_from = request.args.get('date_from', '').strip()
-    date_to = request.args.get('date_to', '').strip()
-    
-    sort_options = {
-        'equipment_id': 'loans.equipment_id',
-        'item_name': 'equipment.item_name',
-        'customer_name': 'customers.name',
-        'checked_out_date': 'loans.checked_out_date',
-        'due_date': 'loans.due_date',
-        'customer_zip': 'customers.zip_code',
-    }
-    sort_column = sort_options.get(sort_by, 'loans.due_date')
-    sort_direction = 'DESC' if sort_dir == 'desc' else 'ASC'
-    
-    conn = connect_db()
-    cursor = conn.cursor()
-    query = (
-        "SELECT loans.id, loans.customer_id, loans.equipment_id, equipment.item_name, customers.name, "
-        "customers.zip_code, loans.checked_out_date, loans.due_date, loans.agreement_data "
-        "FROM loans "
-        "JOIN equipment ON loans.equipment_id = equipment.equipment_id "
-        "JOIN customers ON loans.customer_id = customers.id "
-        "WHERE loans.returned_date IS NULL AND loans.agreement_pending = 0 "
-    )
-    params = list()
-    if date_from:
-        query += "AND loans.checked_out_date >= ? "
-        params.append(date_from)
-    if date_to:
-        query += "AND loans.checked_out_date <= ? "
-        params.append(date_to)
-    if search:
-        search_pattern = f"%{search}%"
-        query += (
-            "AND (loans.equipment_id LIKE ? OR equipment.item_name LIKE ? "
-            "OR customers.name LIKE ? OR customers.zip_code LIKE ?) "
-        )
-        params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
-    query += f"ORDER BY {sort_column} {sort_direction}"
-    cursor.execute(query, params)
-    checked_out_list = cursor.fetchall()
-    conn.close()
-
-    return render_template(
-        'return_equipment.html',
-        checked_out=checked_out_list,
-        search=search,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        date_from=date_from,
-        date_to=date_to,
-    )
+    return redirect(url_for('master_control'))
 
 @app.route('/checked_out')
 def checked_out():
-    return redirect(url_for('return_equipment'))
+    return redirect(url_for('master_control'))
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
@@ -1502,7 +1423,7 @@ def agreement_view(loan_id):
     conn.close()
     if not agreement:
         flash('Agreement not found or no saved signature available.')
-        return redirect(url_for('return_equipment'))
+        return redirect(url_for('master_control'))
     return redirect(url_for('customer_agreement_view', customer_id=agreement['customer_id']))
 
 

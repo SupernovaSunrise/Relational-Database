@@ -4,7 +4,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - dme-data:/app/data
+      - ./data:/app/data
       - dme-backups:/app/backups
     environment:
       - FLASK_ENV=production
@@ -33,5 +33,4 @@ services:
           path: ./requirements.txt
 
 volumes:
-  dme-data:
   dme-backups:

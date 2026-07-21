@@ -5,7 +5,7 @@ services:
       - "5000:5000"
     volumes:
       - dme-data:/app/data
-      - ./backups:/app/backups
+      - dme-backups:/app/backups
     environment:
       - FLASK_ENV=production
       - FLASK_DEBUG=false
@@ -34,3 +34,4 @@ services:
 
 volumes:
   dme-data:
+  dme-backups:

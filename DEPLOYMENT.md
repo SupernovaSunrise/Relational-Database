@@ -48,15 +48,22 @@ python web_app.py
 
 ### Run
 ```bash
-docker-compose up -d
+docker-compose up -d --build
 ```
 
-The app starts at `http://localhost:5000`.
+The app starts at `http://localhost:5000`. Automated daily backups run at 2 AM inside the container.
 
-### Stop
+### Stop (preserves data)
 ```bash
 docker-compose down
 ```
+
+### Stop (DELETES all data)
+```bash
+docker-compose down -v
+```
+
+**Warning:** The `-v` flag removes the database volume. Only use this if you want to wipe everything.
 
 ---
 
@@ -180,12 +187,23 @@ Allow Flask through Windows Firewall when prompted, or manually allow port 5000.
 
 ## Backup
 
-Regularly back up `database.db`:
+### Docker (Automated)
+Backups run automatically at 2 AM daily inside the container, stored in the `dme-backups` volume. On startup, a backup is also created. Backups older than 7 days are pruned automatically.
+
+To list backups:
+```bash
+docker exec dme-checkout-app ls -lh /app/backups/
+```
+
+To copy a backup out of the container:
+```bash
+docker cp dme-checkout-app:/app/backups/database_YYYYMMDD_HHMMSS.db ./restore.db
+```
+
+### Local Python
 ```bash
 copy database.db database.db.backup
 ```
-
-The backup script `backup_db.sh` is available for Docker environments.
 
 ---
 
@@ -193,5 +211,6 @@ The backup script `backup_db.sh` is available for Docker environments.
 
 - **SQLite**: Works well for one machine. Not suitable for multi-machine concurrent access.
 - **HTTPS**: Use a reverse proxy (nginx) with valid SSL certificates for internet-facing deployments.
-- **Backups**: Automate regular database backups.
-- **Updates**: Pull new code and restart; existing `database.db` is preserved (it's in `.gitignore`).
+- **Backups**: Docker environments have automated daily backups (2 AM). Local Python setups should back up `database.db` manually.
+- **Updates**: Pull new code and run `docker-compose up -d --build`; existing database data is preserved in the Docker volume.
+- **Data Safety**: Never run `docker-compose down -v` unless you want to delete all data.

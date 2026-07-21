@@ -2,7 +2,12 @@ equipment.db
 .env
 __pycache__/
 *.pyc
+*.pyo
 .DS_Store
 venv/
 .vscode/
 database.db
+dist/
+build/
+*.spec
+*.exe

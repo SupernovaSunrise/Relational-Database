@@ -6,6 +6,7 @@
 <h1>Add New Equipment</h1>
 
 <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
         <label for="equipment_id">Equipment ID (AA-0000 format):</label>
         <input type="text" id="equipment_id" name="equipment_id" placeholder="e.g., AB-1234" required>

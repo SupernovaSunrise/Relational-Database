@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Equipment Checkout Database{% endblock %}</title>
     <style>
         body {
@@ -109,6 +110,31 @@
             background-color: #ffffff;
             border-color: #007bff;
         }
+        .tab-bar {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            padding: 8px 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #f8f9fa;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+        }
+        .tab-btn:hover {
+            background: #e2e6ea;
+        }
+        .tab-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        tr.overdue-row td:first-child {
+            box-shadow: inset 4px 0 0 #dc3545;
+        }
     </style>
 </head>
 <body>
@@ -116,9 +142,19 @@
         <a href="{{ url_for('index') }}">Home</a>
         <a href="{{ url_for('customers') }}">Customers</a>
         <a href="{{ url_for('equipment') }}">Equipment</a>
-        <a href="{{ url_for('return_equipment') }}">Return</a>
         <a href="{{ url_for('reports') }}">Reports</a>
         <a href="{{ url_for('settings') }}">Settings</a>
+        {% if current_user.is_authenticated %}
+        <span style="float: right; color: white; line-height: 30px; margin-right: 10px;">
+            {{ current_user.username }}
+            <a href="{{ url_for('change_password') }}" style="margin-left: 10px;">Change Password</a>
+            <a href="{{ url_for('logout') }}" style="margin-left: 10px;">Logout</a>
+        </span>
+        {% else %}
+        <span style="float: right; line-height: 30px; margin-right: 10px;">
+            <a href="{{ url_for('login') }}">Login</a>
+        </span>
+        {% endif %}
     </nav>
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -200,9 +236,11 @@
         const CHECKOUT_PERIOD_DAYS = 120;
 
         function saveCell(cell, rowId, field, table, newValue, originalValue) {
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
             fetch('/inline_update', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                 body: JSON.stringify({ table: table, row_id: rowId, field: field, value: newValue })
             })
             .then(function(response) {

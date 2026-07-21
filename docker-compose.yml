@@ -24,6 +24,9 @@ services:
           path: ./web_app.py
           target: /app/web_app.py
         - action: sync
+          path: ./db.py
+          target: /app/db.py
+        - action: sync
           path: ./templates
           target: /app/templates
         - action: rebuild

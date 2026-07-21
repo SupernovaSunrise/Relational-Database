@@ -21,6 +21,7 @@
                 <td>{{ customer.zip_code }}</td>
                 <td>
                     <form method="POST" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="checkout">
                         {% for equipment_id in pending_equipment_ids %}
                         <input type="hidden" name="equipment_ids" value="{{ equipment_id }}">
@@ -40,6 +41,7 @@
     <section style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
         <h2>Add Customer</h2>
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="add_customer">
             <div class="form-group">
                 <label for="customer_name">Name</label>
@@ -60,6 +62,7 @@
     <section style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
         <h2>Add Equipment</h2>
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="add_equipment">
             <div class="form-group">
                 <label for="master_equipment_id_input">Equipment ID</label>
@@ -79,6 +82,35 @@
         <label for="search">Search equipment or customer</label>
         <input id="search" type="search" placeholder="Equipment ID, item name, customer, or phone" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" autocomplete="off">
     </div>
+    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
+        <label for="date_from">Checked Out From</label>
+        <input id="date_from" type="date" value="{{ date_from }}" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
+    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
+        <label for="date_to">Checked Out To</label>
+        <input id="date_to" type="date" value="{{ date_to }}" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
+</div>
+
+{% set ns_count = namespace(all=0, checked_out=0, available=0, overdue=0) %}
+{% for item in rows %}
+    {% set ns_count.all = ns_count.all + 1 %}
+    {% if item.checked_out_date %}
+        {% if item.due_date and item.due_date < today_str %}
+            {% set ns_count.overdue = ns_count.overdue + 1 %}
+        {% else %}
+            {% set ns_count.checked_out = ns_count.checked_out + 1 %}
+        {% endif %}
+    {% else %}
+        {% set ns_count.available = ns_count.available + 1 %}
+    {% endif %}
+{% endfor %}
+
+<div class="tab-bar" style="margin-bottom: 15px;">
+    <button class="tab-btn" data-tab="all">All ({{ ns_count.all }})</button>
+    <button class="tab-btn active" data-tab="checked_out">Checked Out ({{ ns_count.checked_out }})</button>
+    <button class="tab-btn" data-tab="available">Available ({{ ns_count.available }})</button>
+    <button class="tab-btn" data-tab="overdue">Overdue ({{ ns_count.overdue }})</button>
 </div>
 
 <table id="masterTable">
@@ -95,7 +127,17 @@
     </thead>
     <tbody>
         {% for item in rows %}
-        <tr class="master-row"
+        {% set ns = namespace(status='available') %}
+        {% if item.checked_out_date %}
+            {% if item.due_date and item.due_date < today_str %}
+                {% set ns.status = 'overdue' %}
+            {% else %}
+                {% set ns.status = 'checked_out' %}
+            {% endif %}
+        {% endif %}
+        <tr class="master-row{% if ns.status == 'overdue' %} overdue-row{% endif %}"
+            style="{% if ns.status != 'checked_out' and ns.status != 'overdue' %}display:none{% endif %}"
+            data-status="{{ ns.status }}"
             data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }}"
             data-equipment-id="{{ item.equipment_id }}"
             data-item-name="{{ item.item_name }}"
@@ -115,12 +157,14 @@
                         <a class="btn" href="{{ url_for('customer_agreement_view', customer_id=item.customer_id) }}">View Agreement</a>
                     {% endif %}
                     <form method="POST" style="display:inline; margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="return">
                         <input type="hidden" name="loan_id" value="{{ item.loan_id }}">
                         <button type="submit" class="btn btn-danger">Return</button>
                     </form>
                 {% else %}
                     <form method="POST" style="display:flex; gap:6px; align-items:center; margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="checkout">
                         <input type="hidden" name="equipment_id" value="{{ item.equipment_id }}">
                         <input name="customer_reference" type="text" placeholder="Customer ID, Name, Phone (optional)" style="flex:1; min-width:140px; padding:6px; border:1px solid #ddd; border-radius:4px;">
@@ -135,12 +179,71 @@
 <p id="noResults" style="display:none; margin-top:20px;">No equipment matches your search.</p>
 
 <script>
-// Live search
-document.addEventListener('DOMContentLoaded', function () {
-    if (typeof initTableSearch === 'function') {
-        initTableSearch({ inputId: 'search', rowSelector: '.master-row', noResultsId: 'noResults' });
+// Combined tab + search filtering
+(function () {
+    var rows = Array.from(document.querySelectorAll('.master-row'));
+    var tabBtns = document.querySelectorAll('.tab-btn');
+    var searchInput = document.getElementById('search');
+    var noResults = document.getElementById('noResults');
+    var activeTab = 'checked_out';
+
+    function applyFilters() {
+        var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        var visible = 0;
+        rows.forEach(function (r) {
+            var tabMatch = activeTab === 'all' || r.getAttribute('data-status') === activeTab;
+            var searchMatch = !query || (r.getAttribute('data-search-text') || '').indexOf(query) !== -1;
+            var show = tabMatch && searchMatch;
+            r.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (noResults) noResults.style.display = (visible === 0 && query) ? 'block' : 'none';
     }
-});
+
+    tabBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            activeTab = this.getAttribute('data-tab');
+            tabBtns.forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            applyFilters();
+        });
+    });
+
+    if (searchInput) {
+        var rafPending = false;
+        searchInput.addEventListener('input', function () {
+            if (!rafPending) {
+                rafPending = true;
+                requestAnimationFrame(function () { rafPending = false; applyFilters(); });
+            }
+        });
+    }
+
+    applyFilters();
+    applyFilters();
+})();
+
+// Date range auto-apply
+(function () {
+    var dateFrom = document.getElementById('date_from');
+    var dateTo = document.getElementById('date_to');
+    if (!dateFrom || !dateTo) return;
+
+    function applyDateFilter() {
+        var base = window.location.pathname + '?';
+        var params = [];
+        var search = document.getElementById('search');
+        if (search && search.value) params.push('search=' + encodeURIComponent(search.value));
+        params.push('sort_by={{ sort_by }}');
+        params.push('sort_dir={{ sort_dir }}');
+        if (dateFrom.value) params.push('date_from=' + dateFrom.value);
+        if (dateTo.value) params.push('date_to=' + dateTo.value);
+        window.location.href = base + params.join('&');
+    }
+
+    dateFrom.addEventListener('change', applyDateFilter);
+    dateTo.addEventListener('change', applyDateFilter);
+})();
 
 // Column sort
 (function () {

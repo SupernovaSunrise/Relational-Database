@@ -12,9 +12,6 @@ COPY templates/ ./templates/
 
 RUN mkdir -p /app/data
 
-RUN mkdir -p /app/data
-
-# Expose Flask port
 EXPOSE 5000
 
 # Health check

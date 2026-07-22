@@ -138,7 +138,7 @@
         <tr class="master-row{% if ns.status == 'overdue' %} overdue-row{% endif %}"
             style="{% if ns.status != 'checked_out' and ns.status != 'overdue' %}display:none{% endif %}"
             data-status="{{ ns.status }}"
-            data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }}"
+            data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }} {{ item.customer_phone|default('')|replace('(','')|replace(')','')|replace('-','')|replace(' ','') }}"
             data-equipment-id="{{ item.equipment_id }}"
             data-item-name="{{ item.item_name }}"
             data-customer-name="{{ item.customer_name|default('') }}"

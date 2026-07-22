@@ -412,7 +412,7 @@ def master_control():
         if checkout_candidates:
             pass
         else:
-            return redirect(url_for('master_control', search=request.args.get('search', ''), sort_by=request.args.get('sort_by', 'equipment_id'), sort_dir=request.args.get('sort_dir', 'asc'), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', '')))
+            return redirect(url_for('master_control', search=request.form.get('search', request.args.get('search', '')), sort_by=request.form.get('sort_by', request.args.get('sort_by', 'equipment_id')), sort_dir=request.form.get('sort_dir', request.args.get('sort_dir', 'asc')), date_from=request.form.get('date_from', request.args.get('date_from', '')), date_to=request.form.get('date_to', request.args.get('date_to', ''))))
 
     search = request.args.get('search', '').strip()
     sort_by = request.args.get('sort_by', 'equipment_id')
@@ -448,11 +448,13 @@ def master_control():
     query += "LEFT JOIN customers ON loans.customer_id = customers.id "
     if search:
         search_pattern = f"%{escape_like(search)}%"
+        digits_search_pattern = f"%{escape_like(normalize_phone(search))}%"
         query += (
             "WHERE equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\' "
             "OR customers.name LIKE ? ESCAPE '\\' OR customers.phone LIKE ? ESCAPE '\\' "
+            "OR REPLACE(REPLACE(REPLACE(REPLACE(customers.phone,'(',''),')',''),'-',''),' ','') LIKE ? ESCAPE '\\' "
         )
-        params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
+        params.extend([search_pattern, search_pattern, search_pattern, search_pattern, digits_search_pattern])
     query += f"ORDER BY {sort_column} {sort_direction}"
     cursor.execute(query, params)
     rows = cursor.fetchall()
@@ -497,11 +499,13 @@ def customers():
     )
     if search:
         search_pattern = f"%{escape_like(search)}%"
+        digits_search_pattern = f"%{escape_like(normalize_phone(search))}%"
         cursor.execute(
             customer_query +
             "WHERE name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR zip_code LIKE ? ESCAPE '\\' "
+            "OR REPLACE(REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-',''),' ','') LIKE ? ESCAPE '\\' "
             "ORDER BY name",
-            (search_pattern, search_pattern, search_pattern),
+            (search_pattern, search_pattern, search_pattern, digits_search_pattern),
         )
     else:
         cursor.execute(customer_query + "ORDER BY name")
@@ -573,11 +577,14 @@ def equipment():
     params = ()
     if search:
         search_pattern = f"%{escape_like(search)}%"
+        digits_search_pattern = f"%{escape_like(normalize_phone(search))}%"
         query += (
             "WHERE equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\' "
             "OR customers.name LIKE ? ESCAPE '\\' "
+            "OR customers.phone LIKE ? ESCAPE '\\' "
+            "OR REPLACE(REPLACE(REPLACE(REPLACE(customers.phone,'(',''),')',''),'-',''),' ','') LIKE ? ESCAPE '\\' "
         )
-        params = (search_pattern, search_pattern, search_pattern)
+        params = (search_pattern, search_pattern, search_pattern, search_pattern, digits_search_pattern)
     query += "ORDER BY equipment.equipment_id"
     cursor.execute(query, params)
     equipment_list = cursor.fetchall()

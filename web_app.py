@@ -665,6 +665,12 @@ def delete_equipment(equipment_id):
         (equipment_id, item_name, datetime.today().date().isoformat()),
     )
 
+    cursor.execute(
+        "DELETE FROM customer_agreements WHERE loan_id IN (SELECT id FROM loans WHERE equipment_id = ?)",
+        (equipment_id,),
+    )
+    cursor.execute("DELETE FROM loans WHERE equipment_id = ?", (equipment_id,))
+    cursor.execute("DELETE FROM checkout_log WHERE equipment_id = ?", (equipment_id,))
     cursor.execute("DELETE FROM equipment WHERE equipment_id = ?", (equipment_id,))
     conn.commit()
     conn.close()

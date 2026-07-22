@@ -107,8 +107,8 @@
 {% endfor %}
 
 <div class="tab-bar" style="margin-bottom: 15px;">
-    <button class="tab-btn" data-tab="all">All ({{ ns_count.all }})</button>
-    <button class="tab-btn active" data-tab="checked_out">Checked Out ({{ ns_count.checked_out }})</button>
+    <button class="tab-btn active" data-tab="all">All ({{ ns_count.all }})</button>
+    <button class="tab-btn" data-tab="checked_out">Checked Out ({{ ns_count.checked_out }})</button>
     <button class="tab-btn" data-tab="available">Available ({{ ns_count.available }})</button>
     <button class="tab-btn" data-tab="overdue">Overdue ({{ ns_count.overdue }})</button>
 </div>
@@ -136,7 +136,7 @@
             {% endif %}
         {% endif %}
         <tr class="master-row{% if ns.status == 'overdue' %} overdue-row{% endif %}"
-            style="{% if ns.status != 'checked_out' and ns.status != 'overdue' %}display:none{% endif %}"
+            style=""
             data-status="{{ ns.status }}"
             data-search-text="{{ item.equipment_id|lower }} {{ item.item_name|lower }} {{ item.customer_name|default('')|lower }} {{ item.customer_phone|default('')|lower }} {{ item.customer_phone|default('')|replace('(','')|replace(')','')|replace('-','')|replace(' ','') }}"
             data-equipment-id="{{ item.equipment_id }}"
@@ -226,6 +226,13 @@
 
     applyFilters();
     applyFilters();
+
+    document.querySelectorAll('form[method="POST"]').forEach(function (form) {
+        form.addEventListener('submit', function () {
+            var s = form.querySelector('input[name="search"]');
+            if (s) s.value = document.getElementById('search').value;
+        });
+    });
 })();
 
 // Date range auto-apply

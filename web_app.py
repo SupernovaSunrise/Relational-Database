@@ -641,6 +641,12 @@ def delete_customer(customer_id):
         flash('Cannot delete customer while they have active checked out equipment.')
         return redirect(url_for('customers'))
 
+    cursor.execute(
+        "DELETE FROM customer_agreements WHERE customer_id = ?",
+        (customer_id,),
+    )
+    cursor.execute("DELETE FROM checkout_log WHERE equipment_id IN (SELECT equipment_id FROM loans WHERE customer_id = ?)", (customer_id,))
+    cursor.execute("DELETE FROM loans WHERE customer_id = ?", (customer_id,))
     cursor.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
     conn.commit()
     conn.close()

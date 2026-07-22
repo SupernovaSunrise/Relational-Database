@@ -313,7 +313,7 @@ def master_control():
                 conn = connect_db()
                 cursor = conn.cursor()
                 checked_out_date = datetime.today().date()
-                due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+                due_date = add_business_days(checked_out_date, CHECKOUT_PERIOD_DAYS, all_holidays_for_span(checked_out_date, CHECKOUT_PERIOD_DAYS + 30))
                 cursor.execute(
                     "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
                     ('Unknown', '', '00000', checked_out_date.isoformat()),
@@ -363,7 +363,7 @@ def master_control():
                 conn = connect_db()
                 cursor = conn.cursor()
                 checked_out_date = datetime.today().date()
-                due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+                due_date = add_business_days(checked_out_date, CHECKOUT_PERIOD_DAYS, all_holidays_for_span(checked_out_date, CHECKOUT_PERIOD_DAYS + 30))
                 loan_ids = []
                 for equipment_id in equipment_ids:
                     cursor.execute(

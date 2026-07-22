@@ -3,7 +3,8 @@ import sqlite3
 import re
 import sys
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+import calendar
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -15,6 +16,87 @@ else:
 
 CHECKOUT_PERIOD_DAYS = 120
 EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z]{2}-\d{4}$")
+
+
+def _nth_weekday_of_month(year, month, weekday, n):
+    cal = calendar.Calendar(firstweekday=0)
+    days = [d for d in cal.itermonthdates(year, month) if d.month == month and d.weekday() == weekday]
+    return days[n - 1]
+
+
+def _last_weekday_of_month(year, month, weekday):
+    cal = calendar.Calendar(firstweekday=0)
+    days = [d for d in cal.itermonthdates(year, month) if d.month == month and d.weekday() == weekday]
+    return days[-1]
+
+
+def federal_holidays(year):
+    holidays = set()
+
+    def observed(d):
+        if d.weekday() == calendar.SATURDAY:
+            return d - timedelta(days=1)
+        if d.weekday() == calendar.SUNDAY:
+            return d + timedelta(days=1)
+        return d
+
+    holidays.add(observed(date(year, 1, 1)))
+    holidays.add(_nth_weekday_of_month(year, 1, calendar.MONDAY, 3))
+    holidays.add(_nth_weekday_of_month(year, 2, calendar.MONDAY, 3))
+    holidays.add(_last_weekday_of_month(year, 5, calendar.MONDAY))
+    holidays.add(observed(date(year, 6, 19)))
+    holidays.add(observed(date(year, 7, 4)))
+    holidays.add(_nth_weekday_of_month(year, 9, calendar.MONDAY, 1))
+    holidays.add(_nth_weekday_of_month(year, 10, calendar.MONDAY, 2))
+    holidays.add(observed(date(year, 11, 11)))
+    holidays.add(_nth_weekday_of_month(year, 11, calendar.THURSDAY, 4))
+    holidays.add(observed(date(year, 12, 25)))
+
+    return holidays
+
+
+def all_holidays_for_span(start, days):
+    holidays = set()
+    end = start + timedelta(days=days + 60)
+    for year in range(start.year, end.year + 1):
+        holidays.update(federal_holidays(year))
+    return holidays
+
+
+def is_business_day(d, holidays):
+    return d.weekday() < 5 and d not in holidays
+
+
+def calculate_business_days(start, end, holidays):
+    count = 0
+    current = start
+    while current < end:
+        if is_business_day(current, holidays):
+            count += 1
+        current += timedelta(days=1)
+    return count
+
+
+def add_business_days(start, days, holidays):
+    current = start
+    added = 0
+    while added < days:
+        current += timedelta(days=1)
+        if is_business_day(current, holidays):
+            added += 1
+    return current
+
+
+def calculate_due_date(checkout_date, checkout_period_days=CHECKOUT_PERIOD_DAYS):
+    normalized = normalize_date_input(checkout_date)
+    if not normalized:
+        return ''
+    try:
+        parsed = datetime.strptime(normalized, "%Y-%m-%d").date()
+    except ValueError:
+        return ''
+    holidays = all_holidays_for_span(parsed, checkout_period_days + 30)
+    return add_business_days(parsed, checkout_period_days, holidays).isoformat()
 
 
 def normalize_phone(phone):

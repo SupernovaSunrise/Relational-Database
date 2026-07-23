@@ -2,6 +2,8 @@ import os
 import sys
 import argparse
 import logging
+import webbrowser
+import threading
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -73,6 +75,21 @@ def load_user(user_id):
     if row:
         return User(row['id'], row['username'], row['is_admin'])
     return None
+
+
+@app.context_processor
+def inject_is_frozen():
+    return dict(is_frozen=getattr(sys, 'frozen', False))
+
+
+@app.route('/shutdown')
+@login_required
+def shutdown():
+    if not getattr(sys, 'frozen', False):
+        return "Shutdown is only available in the standalone application.", 403
+    log.info("Shutdown requested via /shutdown route")
+    threading.Thread(target=lambda: os._exit(0), daemon=True).start()
+    return "Shutting down..."
 
 
 @app.before_request
@@ -1509,4 +1526,11 @@ if __name__ == '__main__':
         log.info("TLS enabled with cert=%s", ssl_certfile)
 
     log.info("Starting DME Checkout app on port %d (debug=%s)", args.port, debug)
+
+    if getattr(sys, 'frozen', False):
+        proto = 'https' if ssl_context else 'http'
+        url = f'{proto}://localhost:{args.port}'
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+        log.info("Browser will open to %s", url)
+
     app.run(debug=debug, host='0.0.0.0', port=args.port, ssl_context=ssl_context)

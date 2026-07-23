@@ -60,7 +60,7 @@ docker-compose down
 
 ---
 
-## Option 3: Standalone .exe
+## Option 3: Standalone .exe (Recommended for single-computer use)
 
 ### Build
 1. Install Python 3.12+ and pip
@@ -72,12 +72,18 @@ docker-compose down
 dist\DME-Checkout.exe
 ```
 
-The .exe creates `database.db` next to itself on first run and opens the browser to the registration page.
+The .exe creates `database.db` next to itself on first run, starts the web server, and automatically opens your browser to the app. No Python or Docker required on the target machine.
 
 ### Create Fresh Database
 ```bash
 dist\DME-Checkout.exe --blank
 ```
+
+### Shut Down
+Click the **Shutdown** button in the top-right corner of the nav bar to cleanly stop the application. This button only appears when running as the standalone .exe.
+
+### Custom Icon
+The build uses `icon.ico` in the project root. Replace this file with your own `.ico` to customize the executable icon.
 
 ---
 

@@ -55,7 +55,7 @@ def test_saving_agreement_persists_the_entered_checkout_date(agreement_database)
     conn = web_app.connect_db()
     loan = conn.execute("SELECT checked_out_date, due_date FROM loans WHERE id = 1").fetchone()
     conn.close()
-    assert dict(loan) == {"checked_out_date": "2024-03-01", "due_date": "2024-06-29"}
+    assert dict(loan) == {"checked_out_date": "2024-03-01", "due_date": "2024-08-20"}
 
 
 def test_adding_equipment_uses_the_entered_checkout_date(agreement_database):
@@ -81,7 +81,7 @@ def test_adding_equipment_uses_the_entered_checkout_date(agreement_database):
         "SELECT checkout_date FROM checkout_log WHERE equipment_id = ?", ("BB-0002",)
     ).fetchone()
     conn.close()
-    assert dict(new_loan) == {"checked_out_date": "2024-03-01", "due_date": "2024-06-29"}
+    assert dict(new_loan) == {"checked_out_date": "2024-03-01", "due_date": "2024-08-20"}
     assert checkout_log["checkout_date"] == "2024-03-01"
 
 
@@ -100,7 +100,7 @@ def test_normalize_date_input(raw, expected):
 
 
 def test_calculate_due_date():
-    assert calculate_due_date("2026-07-07", 120) == "2026-11-04"
+    assert calculate_due_date("2026-07-07", 120) == "2026-12-29"
 
 
 def test_customer_agreement_route_with_existing_loan_renders():

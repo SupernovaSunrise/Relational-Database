@@ -1,7 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-block_cipher = None
-
 a = Analysis(
     ['web_app.py'],
     pathex=[],
@@ -55,6 +53,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='icon.ico',
-    manifest='app.manifest',
-    version='file_version_info.txt',
 )

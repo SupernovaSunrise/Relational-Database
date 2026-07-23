@@ -1525,12 +1525,15 @@ if __name__ == '__main__':
         ssl_context = (ssl_certfile, ssl_keyfile)
         log.info("TLS enabled with cert=%s", ssl_certfile)
 
-    log.info("Starting DME Checkout app on port %d (debug=%s)", args.port, debug)
+    is_frozen = getattr(sys, 'frozen', False)
+    host = '127.0.0.1' if is_frozen else '0.0.0.0'
 
-    if getattr(sys, 'frozen', False):
+    log.info("Starting DME Checkout app on %s:%d (debug=%s)", host, args.port, debug)
+
+    if is_frozen:
         proto = 'https' if ssl_context else 'http'
         url = f'{proto}://localhost:{args.port}'
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
         log.info("Browser will open to %s", url)
 
-    app.run(debug=debug, host='0.0.0.0', port=args.port, ssl_context=ssl_context)
+    app.run(debug=debug, host=host, port=args.port, ssl_context=ssl_context)

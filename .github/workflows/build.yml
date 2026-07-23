@@ -23,14 +23,25 @@ jobs:
       - name: Build .exe
         run: pyinstaller build.spec --clean --noconfirm
 
+      - name: Generate SHA256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path dist/DME-Checkout.exe -Algorithm SHA256).Hash
+          "$hash  DME-Checkout.exe" | Out-File -Encoding ascii -FilePath dist/SHA256 checksums.txt
+          Get-Content "dist/SHA256 checksums.txt"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: DME-Checkout
-          path: dist/DME-Checkout.exe
+          path: |
+            dist/DME-Checkout.exe
+            dist/SHA256 checksums.txt
 
       - name: Attach to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/DME-Checkout.exe
+          files: |
+            dist/DME-Checkout.exe
+            dist/SHA256 checksums.txt

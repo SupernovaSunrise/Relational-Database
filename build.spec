@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+block_cipher = None
+
 a = Analysis(
     ['web_app.py'],
     pathex=[],
@@ -42,8 +44,8 @@ exe = EXE(
     name='DME-Checkout',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
+    strip=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -53,4 +55,6 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='icon.ico',
+    manifest='app.manifest',
+    version='file_version_info.txt',
 )

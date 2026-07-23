@@ -1,6 +1,6 @@
 # Durable Medical Equipment Checkout Database
 
-A secure database system for tracking durable medical equipment and customer checkouts. Built for the NW Montana Veterans Stand Down and Food Pantry LLC DME Loan Program.
+A secure database system for tracking durable medical equipment and customer checkouts. Built for the NW Montana Veterans Stand Down and Food Pantry DME Loan Program.
 
 ## Features
 

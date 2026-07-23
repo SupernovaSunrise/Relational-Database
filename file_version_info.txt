@@ -15,14 +15,14 @@ VSVersionInfo(
         StringTable(
           u'040904B0',
           [
-            StringStruct(u'CompanyName', u'NW Montana Veterans Stand Down and Food Pantry LLC'),
+            StringStruct(u'CompanyName', u'NW Montana Veterans Stand Down and Food Pantry'),
             StringStruct(u'FileDescription', u'DME Equipment Checkout Database'),
             StringStruct(u'FileVersion', u'1.0.0.0'),
             StringStruct(u'InternalName', u'DME-Checkout'),
             StringStruct(u'OriginalFilename', u'DME-Checkout.exe'),
             StringStruct(u'ProductName', u'DME Checkout'),
             StringStruct(u'ProductVersion', u'1.0.0.0'),
-            StringStruct(u'LegalCopyright', u'Copyright (c) 2026 NW Montana Veterans Stand Down and Food Pantry LLC'),
+            StringStruct(u'LegalCopyright', u'Copyright (c) 2026 NW Montana Veterans Stand Down and Food Pantry'),
           ]
         )
       ]

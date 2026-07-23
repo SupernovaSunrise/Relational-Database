@@ -22,11 +22,11 @@ jobs:
       - name: Install Inno Setup
         run: choco install InnoSetup -y
 
-      - name: Build PyInstaller bootloader from source
-        run: pip install --force-reinstall --no-binary=PyInstaller PyInstaller
-
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+
+      - name: Build PyInstaller bootloader from source
+        run: pip install --force-reinstall --no-binary=PyInstaller PyInstaller
 
       - name: Build .exe (onedir)
         run: pyinstaller build.spec --clean --noconfirm

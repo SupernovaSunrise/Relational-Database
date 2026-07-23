@@ -5,7 +5,7 @@ AppVersion=1.0.0
 AppPublisher=NW Montana Veterans Stand Down and Food Pantry
 DefaultDirName={autopf}\DME Checkout
 DefaultGroupName=DME Checkout
-OutputDir=..\installer
+OutputDir=installer
 OutputBaseFilename=DME-Checkout-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -14,7 +14,7 @@ DisableDirPage=no
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
-SetupIconFile=..\icon.ico
+SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\DME-Checkout.exe
 VersionInfoVersion=1.0.0.0
 VersionInfoCompany=NW Montana Veterans Stand Down and Food Pantry
@@ -29,7 +29,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\DME-Checkout\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\DME-Checkout\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\DME Checkout"; Filename: "{app}\DME-Checkout.exe"

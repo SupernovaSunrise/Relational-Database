@@ -14,3 +14,10 @@ venv/
 .venv
 desktop_app.py
 main.py
+database.db
+backups/
+tests/
+README.md
+SECURITY.md
+DEPLOYMENT.md
+LICENSE

@@ -26,7 +26,7 @@
     </thead>
     <tbody>
         {% for customer in customers %}
-        <tr class="customer-row" data-search-text="{{ customer.name|lower }} {{ customer.phone|lower }} {{ customer.zip_code|lower }}">
+        <tr class="customer-row" data-search-text="{{ customer.name|lower }} {{ customer.phone|lower }} {{ customer.zip_code|lower }} {{ customer.phone|default('')|replace('(','')|replace(')','')|replace('-','')|replace(' ','') }}">
             <td>{{ customer.id }}</td>
             <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="name">{{ customer.name }}</td>
             <td contenteditable="true" data-table="customers" data-row-id="{{ customer.id }}" data-field="phone">{{ customer.phone }}</td>

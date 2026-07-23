@@ -330,7 +330,7 @@ def master_control():
                 conn = connect_db()
                 cursor = conn.cursor()
                 checked_out_date = datetime.today().date()
-                due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+                due_date = add_business_days(checked_out_date, CHECKOUT_PERIOD_DAYS, all_holidays_for_span(checked_out_date, CHECKOUT_PERIOD_DAYS + 30))
                 cursor.execute(
                     "INSERT INTO customers (name, phone, zip_code, date_added) VALUES (?, ?, ?, ?)",
                     ('Unknown', '', '00000', checked_out_date.isoformat()),
@@ -380,7 +380,7 @@ def master_control():
                 conn = connect_db()
                 cursor = conn.cursor()
                 checked_out_date = datetime.today().date()
-                due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+                due_date = add_business_days(checked_out_date, CHECKOUT_PERIOD_DAYS, all_holidays_for_span(checked_out_date, CHECKOUT_PERIOD_DAYS + 30))
                 loan_ids = []
                 for equipment_id in equipment_ids:
                     cursor.execute(
@@ -429,7 +429,7 @@ def master_control():
         if checkout_candidates:
             pass
         else:
-            return redirect(url_for('master_control', search=request.args.get('search', ''), sort_by=request.args.get('sort_by', 'equipment_id'), sort_dir=request.args.get('sort_dir', 'asc'), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', '')))
+            return redirect(url_for('master_control', search=request.form.get('search', request.args.get('search', '')), sort_by=request.form.get('sort_by', request.args.get('sort_by', 'equipment_id')), sort_dir=request.form.get('sort_dir', request.args.get('sort_dir', 'asc')), date_from=request.form.get('date_from', request.args.get('date_from', '')), date_to=request.form.get('date_to', request.args.get('date_to', ''))))
 
     search = request.args.get('search', '').strip()
     sort_by = request.args.get('sort_by', 'equipment_id')
@@ -465,11 +465,13 @@ def master_control():
     query += "LEFT JOIN customers ON loans.customer_id = customers.id "
     if search:
         search_pattern = f"%{escape_like(search)}%"
+        digits_search_pattern = f"%{escape_like(normalize_phone(search))}%"
         query += (
             "WHERE equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\' "
             "OR customers.name LIKE ? ESCAPE '\\' OR customers.phone LIKE ? ESCAPE '\\' "
+            "OR REPLACE(REPLACE(REPLACE(REPLACE(customers.phone,'(',''),')',''),'-',''),' ','') LIKE ? ESCAPE '\\' "
         )
-        params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
+        params.extend([search_pattern, search_pattern, search_pattern, search_pattern, digits_search_pattern])
     query += f"ORDER BY {sort_column} {sort_direction}"
     cursor.execute(query, params)
     rows = cursor.fetchall()
@@ -514,11 +516,13 @@ def customers():
     )
     if search:
         search_pattern = f"%{escape_like(search)}%"
+        digits_search_pattern = f"%{escape_like(normalize_phone(search))}%"
         cursor.execute(
             customer_query +
             "WHERE name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR zip_code LIKE ? ESCAPE '\\' "
+            "OR REPLACE(REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-',''),' ','') LIKE ? ESCAPE '\\' "
             "ORDER BY name",
-            (search_pattern, search_pattern, search_pattern),
+            (search_pattern, search_pattern, search_pattern, digits_search_pattern),
         )
     else:
         cursor.execute(customer_query + "ORDER BY name")
@@ -590,11 +594,14 @@ def equipment():
     params = ()
     if search:
         search_pattern = f"%{escape_like(search)}%"
+        digits_search_pattern = f"%{escape_like(normalize_phone(search))}%"
         query += (
             "WHERE equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\' "
             "OR customers.name LIKE ? ESCAPE '\\' "
+            "OR customers.phone LIKE ? ESCAPE '\\' "
+            "OR REPLACE(REPLACE(REPLACE(REPLACE(customers.phone,'(',''),')',''),'-',''),' ','') LIKE ? ESCAPE '\\' "
         )
-        params = (search_pattern, search_pattern, search_pattern)
+        params = (search_pattern, search_pattern, search_pattern, search_pattern, digits_search_pattern)
     query += "ORDER BY equipment.equipment_id"
     cursor.execute(query, params)
     equipment_list = cursor.fetchall()
@@ -651,6 +658,12 @@ def delete_customer(customer_id):
         flash('Cannot delete customer while they have active checked out equipment.')
         return redirect(url_for('customers'))
 
+    cursor.execute(
+        "DELETE FROM customer_agreements WHERE customer_id = ?",
+        (customer_id,),
+    )
+    cursor.execute("DELETE FROM checkout_log WHERE equipment_id IN (SELECT equipment_id FROM loans WHERE customer_id = ?)", (customer_id,))
+    cursor.execute("DELETE FROM loans WHERE customer_id = ?", (customer_id,))
     cursor.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
     conn.commit()
     conn.close()
@@ -682,6 +695,12 @@ def delete_equipment(equipment_id):
         (equipment_id, item_name, datetime.today().date().isoformat()),
     )
 
+    cursor.execute(
+        "DELETE FROM customer_agreements WHERE loan_id IN (SELECT id FROM loans WHERE equipment_id = ?)",
+        (equipment_id,),
+    )
+    cursor.execute("DELETE FROM loans WHERE equipment_id = ?", (equipment_id,))
+    cursor.execute("DELETE FROM checkout_log WHERE equipment_id = ?", (equipment_id,))
     cursor.execute("DELETE FROM equipment WHERE equipment_id = ?", (equipment_id,))
     conn.commit()
     conn.close()

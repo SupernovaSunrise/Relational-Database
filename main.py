@@ -2,6 +2,7 @@ import sqlite3
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from db import add_business_days, all_holidays_for_span
 
 DB_PATH = Path(__file__).parent / "database.db"
 CHECKOUT_PERIOD_DAYS = 120
@@ -223,7 +224,7 @@ def checkout_equipment():
     if equipment_id is None:
         return
     checked_out_date = datetime.today().date()
-    due_date = checked_out_date + timedelta(days=CHECKOUT_PERIOD_DAYS)
+    due_date = add_business_days(checked_out_date, CHECKOUT_PERIOD_DAYS, all_holidays_for_span(checked_out_date, CHECKOUT_PERIOD_DAYS + 30))
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute(

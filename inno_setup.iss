@@ -12,7 +12,6 @@ SolidCompression=yes
 DisableProgramGroupPage=yes
 DisableDirPage=no
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridingAllowed=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 SetupIconFile=..\icon.ico

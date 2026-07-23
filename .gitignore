@@ -10,5 +10,6 @@ database.db
 data/
 dist/
 build/
+installer/
 *.spec
 *.exe

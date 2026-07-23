@@ -1,4 +1,4 @@
-name: Build DME-Checkout.exe
+name: Build DME-Checkout
 
 on:
   push:
@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PYINSTALLER_COMPILE_BOOTLOADER: 1
     steps:
       - uses: actions/checkout@v4
 
@@ -17,31 +19,54 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Inno Setup
+        run: choco install InnoSetup -y
+
+      - name: Build PyInstaller bootloader from source
+        run: pip install --force-reinstall --no-binary=PyInstaller PyInstaller
+
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
-      - name: Build .exe
+      - name: Build .exe (onedir)
         run: pyinstaller build.spec --clean --noconfirm
 
-      - name: Generate SHA256 checksum
+      - name: Build installer
+        run: "& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' inno_setup.iss"
+
+      - name: Generate SHA256 checksums
         shell: pwsh
         run: |
-          $hash = (Get-FileHash -Path "dist/DME-Checkout.exe" -Algorithm SHA256).Hash
-          "$hash  DME-Checkout.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
+          $exeHash = (Get-FileHash -Path "dist/DME-Checkout/DME-Checkout.exe" -Algorithm SHA256).Hash
+          "$exeHash  DME-Checkout.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
+          if (Test-Path "installer/DME-Checkout-Setup.exe") {
+            $setupHash = (Get-FileHash -Path "installer/DME-Checkout-Setup.exe" -Algorithm SHA256).Hash
+            "$setupHash  DME-Checkout-Setup.exe" | Out-File -Encoding ascii -Append -FilePath "dist/SHA256 checksums.txt"
+          }
           Get-Content "dist/SHA256 checksums.txt"
 
-      - name: Upload artifact
+      - name: Upload folder artifact
         uses: actions/upload-artifact@v4
         with:
           name: DME-Checkout
-          path: |
-            dist/DME-Checkout.exe
-            dist/SHA256 checksums.txt
+          path: dist/DME-Checkout/
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DME-Checkout-Setup
+          path: installer/DME-Checkout-Setup.exe
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHA256-checksums
+          path: dist/SHA256 checksums.txt
 
       - name: Attach to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/DME-Checkout.exe
+            installer/DME-Checkout-Setup.exe
             dist/SHA256 checksums.txt

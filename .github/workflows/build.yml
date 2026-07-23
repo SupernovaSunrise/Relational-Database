@@ -32,7 +32,8 @@ jobs:
         run: pyinstaller build.spec --clean --noconfirm
 
       - name: Build installer
-        run: "& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' inno_setup.iss"
+        shell: pwsh
+        run: & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" inno_setup.iss
 
       - name: Generate SHA256 checksums
         shell: pwsh

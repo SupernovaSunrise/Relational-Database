@@ -26,8 +26,8 @@ jobs:
       - name: Generate SHA256 checksum
         shell: pwsh
         run: |
-          $hash = (Get-FileHash -Path dist/DME-Checkout.exe -Algorithm SHA256).Hash
-          "$hash  DME-Checkout.exe" | Out-File -Encoding ascii -FilePath dist/SHA256 checksums.txt
+          $hash = (Get-FileHash -Path "dist/DME-Checkout.exe" -Algorithm SHA256).Hash
+          "$hash  DME-Checkout.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
           Get-Content "dist/SHA256 checksums.txt"
 
       - name: Upload artifact

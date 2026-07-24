@@ -153,11 +153,6 @@
         {% if current_user.is_authenticated %}
         <span style="float: right; color: white; line-height: 30px; margin-right: 10px;">
             {{ current_user.username }}
-            <a href="{{ url_for('change_password') }}" style="margin-left: 10px;">Change Password</a>
-            <a href="{{ url_for('logout') }}" style="margin-left: 10px;">Logout</a>
-            {% if is_frozen %}
-            <a href="{{ url_for('shutdown') }}" class="nav-danger" style="margin-left: 10px;" onclick="return confirm('Shut down the application?');">Shutdown</a>
-            {% endif %}
         </span>
         {% else %}
         <span style="float: right; line-height: 30px; margin-right: 10px;">

@@ -67,30 +67,72 @@ docker-compose down -v
 
 ---
 
-## Option 3: Standalone .exe (Recommended for single-computer use)
+## Option 3: Standalone .exe Installer (Recommended for single-computer use)
 
-### Build
-1. Install Python 3.12+ and pip
-2. Run: `build.bat`
-3. Find the executable at `dist\DME-Checkout.exe`
+### Download
+
+Download `DME-Checkout-Setup.exe` from the [GitHub Releases](https://github.com/SupernovaSunrise/Relational-Database/releases) page or from the Actions artifacts of a successful build.
+
+### Windows SmartScreen Warning
+
+When you first run the installer or the `.exe`, Windows may display a **SmartScreen warning**:
+
+> Windows protected your PC
+> Microsoft Defender SmartScreen prevented an unrecognized app from starting.
+
+This is normal for applications that are not yet code-signed. It does **not** mean the application is unsafe. The warning appears because the application has not yet accumulated enough download history for Microsoft to establish a reputation.
+
+**To proceed:**
+
+1. Click **"More info"**
+2. Click **"Run anyway"**
+
+If you downloaded from a trusted source (GitHub Releases from the NW Montana Veterans Stand Down and Food Pantry organization), it is safe to proceed.
+
+### Install
+
+Run `DME-Checkout-Setup.exe`. The installer will:
+- Install to `C:\Users\<you>\AppData\Local\DME Checkout\` (no admin required)
+- Create a Start Menu shortcut
+- Optionally create a Desktop shortcut
+- Launch the application after installation
 
 ### Run
-```bash
-dist\DME-Checkout.exe
-```
 
-The .exe creates `database.db` next to itself on first run, starts the web server, and automatically opens your browser to the app. No Python or Docker required on the target machine.
+After installation, launch from:
+- **Start Menu** > DME Checkout
+- **Desktop shortcut** (if selected during install)
+
+The app automatically opens your browser to `http://localhost:5000`. No Python or Docker required on the target machine.
 
 ### Create Fresh Database
+
 ```bash
-dist\DME-Checkout.exe --blank
+DME-Checkout.exe --blank
 ```
 
 ### Shut Down
-Click the **Shutdown** button in the top-right corner of the nav bar to cleanly stop the application. This button only appears when running as the standalone .exe.
+
+Click **Settings** in the nav bar, then click the **Shutdown** button. This cleanly stops the application. The Shutdown button only appears when running as the standalone .exe.
+
+### Portable Version
+
+You can also download the `DME-Checkout` folder artifact (a zip of `dist/DME-Checkout/`). Extract it anywhere and run `DME-Checkout.exe` directly. No installer needed.
 
 ### Custom Icon
+
 The build uses `icon.ico` in the project root. Replace this file with your own `.ico` to customize the executable icon.
+
+### File Verification
+
+Each build produces a `SHA256 checksums.txt` file. To verify your download:
+
+```powershell
+# PowerShell
+(Get-FileHash -Path "DME-Checkout-Setup.exe" -Algorithm SHA256).Hash
+```
+
+Compare the output hash to the one in the checksums file.
 
 ---
 
@@ -150,6 +192,7 @@ volumes:
 | `EQUIPMENT_SEARCH_API_KEY` | none | API key for equipment search |
 | `ADMIN_USERNAME` | none | Auto-create admin on startup |
 | `ADMIN_PASSWORD` | none | Auto-create admin on startup |
+| `DB_PATH` | `database.db` | Path to SQLite database file |
 
 ---
 
@@ -189,6 +232,9 @@ docker-compose logs -dme-app
 ### Windows Firewall
 Allow Flask through Windows Firewall when prompted, or manually allow port 5000.
 
+### SmartScreen Blocks the Application
+See the [Windows SmartScreen Warning](#windows-smartscreen-warning) section above.
+
 ---
 
 ## Backup
@@ -211,6 +257,22 @@ docker cp dme-checkout-app:/app/backups/database_YYYYMMDD_HHMMSS.db ./restore.db
 copy database.db database.db.backup
 ```
 
+### Standalone .exe
+The `database.db` file is created in the same directory as the executable. Copy it to a safe location:
+```powershell
+copy DME-Checkout\database.db DME-Checkout\database.db.backup
+```
+
+---
+
+## Security Notes
+
+- **Authentication**: All pages require login except the initial admin registration.
+- **Admin-only actions**: Deleting customers/equipment, importing/exporting data, and shutting down the application require admin privileges.
+- **Session cookies**: Set to `SameSite=Lax` for CSRF protection.
+- **Brute-force protection**: After 5 failed login attempts within 5 minutes, further attempts are temporarily blocked.
+- **CSRF protection**: All forms include CSRF tokens via Flask-WTF.
+
 ---
 
 ## Production Considerations
@@ -220,3 +282,4 @@ copy database.db database.db.backup
 - **Backups**: Docker environments have automated daily backups (2 AM). Local Python setups should back up `database.db` manually.
 - **Updates**: Pull new code and run `docker-compose up -d --build`; existing database data is preserved in the Docker volume.
 - **Data Safety**: Never run `docker-compose down -v` unless you want to delete all data.
+- **Code Signing**: The .exe is currently unsigned. Consider a code signing certificate (~$80-100/yr) or Microsoft Store publishing ($19 one-time) to eliminate SmartScreen warnings for end users.

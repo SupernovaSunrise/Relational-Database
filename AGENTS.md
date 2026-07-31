@@ -2,94 +2,115 @@
 
 ## Project Overview
 
-DME (Durable Medical Equipment) Checkout Database — a Flask web application for the **NW Montana Veterans Stand Down and Food Pantry** (501(c)(3) nonprofit). Manages equipment checkout/return, customer records, and loan agreements for a veteran services program.
+DME (Durable Medical Equipment) Checkout Database — an **Electron desktop application** for the **NW Montana Veterans Stand Down and Food Pantry** (501(c)(3) nonprofit). Manages equipment checkout/return, customer records, and loan agreements for a veteran services program.
 
 **Repository**: `https://github.com/SupernovaSunrise/Relational-Database.git`
 **Default branch**: `Remote`
+**Product name**: Mendure DME
+
+The app is a full rewrite of the original Flask web application. Legacy Flask files (`web_app.py`, `db.py`, `templates/`, `desktop_app.py`, `main.py`) remain in the repo as reference/oracle but are **dead code** — do not modify them. The `db.py` schema and business logic (due dates, holidays, phones) are the behavior authority that the JS port must match.
 
 ## Tech Stack
 
-- **Backend**: Python 3.12+, Flask, Flask-Login, Flask-WTF (CSRF), SQLite
-- **Frontend**: Jinja2 templates, vanilla JS (no framework)
-- **Packaging**: PyInstaller (.exe), Inno Setup (installer), GitHub Actions CI
-- **Containerization**: Docker (optional, alternative to .exe)
+- **Runtime**: Electron 43 (Chromium + Node 22.x), CommonJS
+- **Renderer**: Vanilla HTML/CSS/JS (no framework, no bundler), strict CSP
+- **IPC**: preload `contextBridge` allowlist API (`window.dme.*`), no HTTP server, no ports
+- **Database**: SQLite via `node:sqlite` (`DatabaseSync`) — built into Node/Electron, no native compile
+- **Security**: contextIsolation, sandbox, webSecurity, sender/payload/auth/admin gates on every channel
+- **Excel import/export**: exceljs
+- **Packaging**: electron-builder (NSIS installer + portable exe), GitHub Actions CI
+- **Updates**: electron-updater feed configured (`latest.yml`); in-app wiring pending code signing
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `web_app.py` | Main Flask application — all routes, auth, import/export |
-| `db.py` | Database schema, connection, helpers (phone formatting, holidays, due dates) |
-| `templates/base.html` | Base template with nav bar, inline editing JS, security headers |
-| `templates/master.html` | Home page — checkout/return, equipment table with tabs |
-| `templates/settings.html` | Account management (password, logout, shutdown) + data import/export |
-| `templates/customers.html` | Customer list with inline editing |
-| `templates/equipment.html` | Equipment list with inline editing |
-| `templates/reports.html` | Analytics and reporting |
-| `templates/customer_agreement.html` | Loan agreement with signature pad |
-| `build.spec` | PyInstaller spec (must `git add -f` due to `*.spec` in .gitignore) |
-| `inno_setup.iss` | Inno Setup installer script |
-| `.github/workflows/build.yml` | CI: builds .exe and installer, generates checksums |
-| `requirements.txt` | Runtime dependencies |
-| `requirements-dev.txt` | Dev dependencies (includes pyinstaller) |
+| `src/main/main.js` | Electron entry — window creation, security flags, single-instance lock |
+| `src/main/ipc.js` | IPC wiring — sender/payload/auth/admin gates, all channel registration |
+| `src/main/db.js` | SQLite data layer — schema, migrations, first-run legacy DB copy, query helpers |
+| `src/main/auth.js` | Password hashing (werkzeug pbkdf2 + scrypt compatible), session, rate limiter, auth handlers |
+| `src/main/features/*.js` | Feature handlers: customers, equipment, loans, agreements, reports, import-export |
+| `src/shared/ipc-contract.js` | Channel names, payload specs (types + length caps), auth/admin gate sets |
+| `src/shared/business-logic.js` | Due dates, holidays, phones, date/escape helpers (verified parity with db.py) |
+| `src/preload/index.js` | contextBridge API — the only renderer→main surface, one method per channel |
+| `src/renderer/index.html` | SPA shell — strict CSP meta, nav, view container |
+| `src/renderer/js/app.js` | App namespace: session state, hash router, flash banners, inline-edit engine, HTML escaping |
+| `src/renderer/js/views/*.js` | Views: auth, master (checkout/return), customers, equipment, reports, settings, agreement |
+| `tests/*.test.js` | Jest suites: business-logic parity, auth, ipc-contract, db migration, features |
+| `scripts/generate-legacy-reference.py` | Generates the parity oracle fixture from real Python `db.py` |
+| `electron-builder.yml` | Packaging config (NSIS + portable, GitHub publish feed) |
+| `.github/workflows/build.yml` | CI: jest → electron-builder → checksums → artifacts/release |
+| `database.db` | Directory artifact only — the real DB is `userData/database.db` at runtime |
+| Legacy (dead) | `web_app.py`, `db.py`, `templates/`, `desktop_app.py`, `main.py` |
 
 ## Build & Run
 
 ### Local development
 ```bash
-pip install -r requirements.txt
-python web_app.py
+npm ci
+npm start
 ```
-App runs at `http://localhost:5000`. First visit prompts admin account creation.
 
-### Build .exe (local)
+### Test
 ```bash
-build.bat
-# Output: dist/DME-Checkout/DME-Checkout.exe
+npm test                 # jest, all suites
+npm test -- --runInBand  # use when sqlite WAL conflicts occur
 ```
 
-### Build .exe (CI)
-Pushes to `Remote`, `main`, or `master` branches trigger GitHub Actions. The workflow:
-1. Builds PyInstaller bootloader from source (for maximum Windows compatibility)
-2. Builds onedir .exe via `build.spec`
-3. Builds Inno Setup installer
-4. Generates SHA256 checksums for both
-5. Uploads 3 artifacts (folder, installer, checksums)
+### Build Windows artifacts
+```bash
+npm run dist            # NSIS installer + portable exe → dist/
+npm run dist:portable   # portable only
+# Output: dist/Mendure-DME-Setup-<version>.exe and dist/Mendure-DME-Portable-<version>.exe
+```
+
+### Build (CI)
+Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
+1. `npm ci` + jest (all 150 tests)
+2. `npm run dist` (unsigned unless signing secrets are present)
+3. Generates `SHA256 checksums.txt`
+4. Uploads artifacts (installer, portable, update feed `latest.yml` + blockmap, checksums)
+5. On GitHub `release` events, attaches everything to the release (serves the auto-update feed)
 
 ## Code Conventions
 
 - **No comments in code** unless explicitly requested
 - **No new dependencies** without confirming they're needed
-- **Security first**: All routes use `@login_required`. Admin-only actions check `current_user.is_admin`. Forms use CSRF tokens.
-- **SQLite**: Single-database, single-writer. No connection pooling needed. Always `conn.close()` after operations.
-- **Templates**: Extend `base.html`. Use `url_for()` for links. Include CSRF token in all POST forms: `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">`
-- **Error handling**: Use `flash()` for user-facing messages. Return `redirect(url_for(...))` after POST.
-- **Phone numbers**: Stored as `(XXX) XXX-XXXX` format. Use `normalize_phone()` and `format_phone()` from db.py.
-- **Equipment IDs**: Format `AA-0000` (2 letters, dash, 4 digits). Validated by `EQUIPMENT_ID_PATTERN` from db.py.
+- **IPC contract first**: channels are declared in `src/shared/ipc-contract.js` with payload type+length specs. Payload validation is fail-closed (unknown keys, wrong types, over-length all rejected). New channels must get a PAYLOADS entry.
+- **Security gates are central**: `src/main/ipc.js` enforces sender trust, payload validation, auth (`REQUIRED_AUTH` = public; everything else needs a session), and admin (`REQUIRED_ADMIN`: deletes, import/export, shutdown). Feature handlers never re-validate types but DO re-check business rules.
+- **Renderer trust boundary**: renderer is sandboxed + context-isolated; it can only reach main via `window.dme.*`. All user input must be HTML-escaped before DOM injection (`App.escapeHtml`).
+- **SQLite**: single-writer, WAL mode. Use `db.withDb(fn)` — opens a fresh `DatabaseSync`, closes it via try/finally. Always parameterized queries.
+- **Phone numbers**: stored as `(XXX) XXX-XXXX`. Use `normalizePhone()` / `formatPhone()` from business-logic.js.
+- **Equipment IDs**: format `AA-0000` (2 letters, dash, 4 digits). Validated by `EQUIPMENT_ID_PATTERN`.
+- **Errors**: handlers return `{ ok: false, error: '...' }`, never throw across the bridge. The IPC wrapper converts unexpected throws to `internal error` + logs.
+- **Responses**: success shapes are `{ ok: true, ... }`; lists `{ ok: true, items: [...] }`; single entities `{ ok: true, item: {...} }`; DB columns are snake_case.
 
 ## Security Model
 
-- **Auth**: Flask-Login with `@login_required` on all routes except `/login`, `/register`, `/static`
-- **Admin gate**: `current_user.is_admin` check on delete, import/export, shutdown
-- **CSRF**: Flask-WTF CSRFProtect on all forms
-- **Brute-force**: 5 failed logins per IP per 5 minutes
-- **Session**: `SameSite=Lax` cookies
-- **Headers**: CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff
-- **Logout**: POST-only (not GET) to prevent CSRF logout
+- **Window**: contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools off when packaged, `setWindowOpenHandler` deny, `will-navigate` guard, single-instance lock
+- **IPC**: every channel → trusted-sender check → payload validation (strict key allowlist, type + length caps, `MAX_PAYLOAD_BYTES` 1 MB) → session gate → admin gate
+- **Auth**: werkzeug-compatible password hashes — verifies `pbkdf2:sha256:<iter>` AND `scrypt:n:r:p` (legacy Flask DBs may contain either); new hashes `pbkdf2:sha256:600000`. Brute-force: 5 failed logins / 300s keyed by webContents id. First registered user gets admin.
+- **Renderer**: strict CSP (no inline scripts/styles, no eval, `connect-src 'none'`), XSS contained by escaping, no Node access
+- **Data**: SQLite at `app.getPath('userData')/database.db`, unencrypted (same exposure class as legacy), WAL sidecars hold newest rows
+- **Migration**: first run copies legacy `database.db` (exe-adjacent, else project root) into userData — never overwrites an existing target; warns if legacy `-wal` sidecar exists
 
 ## Important Notes
 
-- `db.py` has `calculate_due_date()` which accounts for weekends and 11 federal holidays
-- The .exe binds to `127.0.0.1` (localhost only); dev/Docker binds to `0.0.0.0`
-- `desktop_app.py` and `main.py` are **deprecated** — dead code with outdated schema. Do not modify.
-- `templates/change_password.html` was deleted — password change is now in `settings.html`
-- `build.spec` is force-added to git despite `*.spec` in .gitignore — always use `git add -f build.spec`
-- The `database.db/` directory in the repo is an empty artifact — the actual database is `database.db` (a file)
+- `calculateDueDate()` accounts for weekends + 11 federal holidays; parity with Python `db.py` is enforced by tests using the generated fixture.
+- The legacy pytest `tests/test_agreement_date.py` has a KNOWN BUG: it expects `2024-08-20` but real `db.py` returns `2024-08-21`. The Jest port asserts the correct `2024-08-21` (parity with real Python).
+- `node:sqlite` requires Electron ≥ 35 (we pin ≥ 43). `DatabaseSync` is synchronous — keep operations short.
+- Jest tests must pass an explicit temp `dbPath` to `initDb()` — never let `db.js` resolve the default path (it falls back to the repo-root `database.db` dir artifact).
+- `importExport:import*` handlers ignore renderer-supplied paths; the main process always opens native `dialog` pickers.
+- Legacy Flask files stay as reference only. The build ships only `src/**/*` + `package.json` + `icon.ico`.
+- CI signing is wired for SSL.com eSigner via Azure Trusted Signing secrets — but ONLY runs when the secrets are present. Unsigned builds get SmartScreen warnings. Do NOT wire `electron-updater` in-app until builds are code-signed.
 
 ## Testing
 
-Tests are in `tests/test_agreement_date.py`. Run with:
-```bash
-pytest tests/
-```
-Note: Python is not installed locally on this machine. Tests run in CI via GitHub Actions.
+Jest suites in `tests/` (`*.test.js`), 150 tests / 5 suites:
+- `business-logic.test.js` — 990-case parity fixture vs real Python db.py (2020–2040 holidays/due dates), phones, dates, escape
+- `auth.test.js` — werkzeug 2.3.7 pbkdf2 + 3.1.3 scrypt hash vectors, register/login/rate-limit/session/change-password
+- `ipc-contract.test.js` — payload validation fail-closed, sender gate, REQUIRED_AUTH/ADMIN invariants, full handler pipeline
+- `db.test.js` — schema/index/migration-column parity with db.py, legacy DB copy, migration idempotence
+- `features.test.js` — end-to-end handler flows (add/search/checkout/agreement/return/cancel/reports) on temp DBs
+
+Run: `npm test`. Python is NOT required for tests (fixture is checked in); `scripts/generate-legacy-reference.py` regenerates the oracle if db.py ever changes.

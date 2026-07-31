@@ -9,7 +9,10 @@ venv/
 database.db
 data/
 dist/
+dist-debug/
+dist-test/
 build/
 installer/
 *.spec
 *.exe
+node_modules/

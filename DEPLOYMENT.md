@@ -1,285 +1,115 @@
 # Local Deployment Guide
 
-This guide covers running the DME Checkout application on a single business computer.
+This guide covers installing and running Mendure DME on a single business computer.
 
 ## Prerequisites
 
-- Python 3.12+ installed
-- This repository cloned/downloaded
+- Windows 10/11 64-bit. No Python, no Node, no Docker required on the target machine.
 
-## Option 1: Direct Python (Simplest)
+## Installing
 
-### Setup
-```bash
-pip install -r requirements.txt
-```
+### Option 1: Installer (Recommended)
 
-### Run
-```bash
-python web_app.py
-```
+Download `Mendure-DME-Setup-<version>.exe` from the [GitHub Releases](https://github.com/SupernovaSunrise/Relational-Database/releases) page.
 
-The app starts at `http://localhost:5000`. On first run, you'll be redirected to create an admin account.
-
-### Useful Commands
-```bash
-# Create a fresh blank database (deletes existing data)
-python web_app.py --blank
-
-# Run on a different port
-python web_app.py --port 8080
-
-# Enable debug mode (development only)
-set FLASK_DEBUG=true
-python web_app.py
-```
-
-### Auto-start on Windows
-1. Right-click desktop > New > Shortcut
-2. Enter: `cmd /k cd /d C:\path\to\repo && python web_app.py`
-3. Name it "DME Checkout" and place in Startup folder
-
----
-
-## Option 2: Docker (Isolated & Repeatable)
-
-### Prerequisites
-- Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
-
-### Run
-```bash
-docker-compose up -d --build
-```
-
-The app starts at `http://localhost:5000`. Automated daily backups run at 2 AM inside the container.
-
-### Stop (preserves data)
-```bash
-docker-compose down
-```
-
-### Stop (DELETES all data)
-```bash
-docker-compose down -v
-```
-
-**Warning:** The `-v` flag removes the database volume. Only use this if you want to wipe everything.
-
----
-
-## Option 3: Standalone .exe Installer (Recommended for single-computer use)
-
-### Download
-
-Download `DME-Checkout-Setup.exe` from the [GitHub Releases](https://github.com/SupernovaSunrise/Relational-Database/releases) page or from the Actions artifacts of a successful build.
-
-### Windows SmartScreen Warning
-
-When you first run the installer or the `.exe`, Windows may display a **SmartScreen warning**:
-
-> Windows protected your PC
-> Microsoft Defender SmartScreen prevented an unrecognized app from starting.
-
-This is normal for applications that are not yet code-signed. It does **not** mean the application is unsafe. The warning appears because the application has not yet accumulated enough download history for Microsoft to establish a reputation.
-
-**To proceed:**
-
-1. Click **"More info"**
-2. Click **"Run anyway"**
-
-If you downloaded from a trusted source (GitHub Releases from the NW Montana Veterans Stand Down and Food Pantry organization), it is safe to proceed.
-
-### Install
-
-Run `DME-Checkout-Setup.exe`. The installer will:
-- Install to `C:\Users\<you>\AppData\Local\DME Checkout\` (no admin required)
+Run it. The installer will:
+- Install to `C:\Users\<you>\AppData\Local\Programs\Mendure DME\` (no admin required)
 - Create a Start Menu shortcut
 - Optionally create a Desktop shortcut
 - Launch the application after installation
 
-### Run
+### Option 2: Portable (no install)
 
-After installation, launch from:
-- **Start Menu** > DME Checkout
-- **Desktop shortcut** (if selected during install)
+Download `Mendure-DME-Portable-<version>.exe`. Run it anywhere — no install needed. Data is still stored per-user in the app data folder.
 
-The app automatically opens your browser to `http://localhost:5000`. No Python or Docker required on the target machine.
+### Windows SmartScreen Warning
 
-### Create Fresh Database
+When you first run the installer or the `.exe`, Windows may show:
 
-```bash
-DME-Checkout.exe --blank
-```
+> Windows protected your PC
+> Microsoft Defender SmartScreen prevented an unrecognized app from starting.
 
-### Shut Down
+This is normal for applications that are not yet code-signed. It does **not** mean the application is unsafe.
 
-Click **Settings** in the nav bar, then click the **Shutdown** button. This cleanly stops the application. The Shutdown button only appears when running as the standalone .exe.
+**To proceed:**
+1. Click **"More info"**
+2. Click **"Run anyway"**
 
-### Portable Version
-
-You can also download the `DME-Checkout` folder artifact (a zip of `dist/DME-Checkout/`). Extract it anywhere and run `DME-Checkout.exe` directly. No installer needed.
-
-### Custom Icon
-
-The build uses `icon.ico` in the project root. Replace this file with your own `.ico` to customize the executable icon.
-
-### File Verification
-
-Each build produces a `SHA256 checksums.txt` file. To verify your download:
-
-```powershell
-# PowerShell
-(Get-FileHash -Path "DME-Checkout-Setup.exe" -Algorithm SHA256).Hash
-```
-
-Compare the output hash to the one in the checksums file.
-
----
+If you downloaded from a trusted source (the NW Montana Veterans Stand Down and Food Pantry GitHub releases), it is safe to proceed.
 
 ## First-Time Setup
 
-1. Open the app in your browser
+1. Open the app
 2. You'll see the "Create Admin Account" page
-3. Choose a username and strong password
+3. Choose a username and strong password (min 8 characters)
 4. Log in with your new credentials
 5. Start adding equipment and customers
 
----
+## Migrating from the Old Flask App
 
-## TLS/HTTPS Setup
+The first launch looks for a legacy `database.db` next to the old exe (or in the project folder) and copies it into the new app data location. It never overwrites existing data.
 
-For any deployment accessible over a network, TLS is recommended.
+- **Important**: If the old app is still running, close it first. SQLite WAL data (`database.db-wal`) is not copied; uncheckpointed checkouts would be lost.
+- After migration, verify a few recent checkouts appear in the Reports → Checkout Log tab.
 
-### Generate Self-Signed Certificate
-```bash
-# Windows (requires OpenSSL)
-generate_cert.bat
+## Data Storage
 
-# Or manually
-openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+- Location: `%APPDATA%\Mendure DME\database.db`
+- Back up by copying `database.db` (and ideally the `-wal`/`-shm` sidecars, after closing the app) to a safe location:
+
+```powershell
+copy "$env:APPDATA\Mendure DME\database.db" "$env:APPDATA\Mendure DME\database.db.backup"
 ```
 
-### Enable TLS
-```bash
-set SSL_CERTFILE=cert.pem
-set SSL_KEYFILE=key.pem
-python web_app.py
+## Shut Down
+
+Click **Settings**, then **Shutdown**. The app quits cleanly. (Or just close the window.)
+
+## File Verification
+
+Each build produces a `SHA256 checksums.txt`. To verify a download:
+
+```powershell
+(Get-FileHash -Path "Mendure-DME-Setup-1.0.0.exe" -Algorithm SHA256).Hash
 ```
 
-The app will be available at `https://localhost:5000`.
+Compare to the checksums file on the Release.
 
-### Docker TLS
-Add to `docker-compose.yml`:
-```yaml
-environment:
-  - SSL_CERTFILE=/app/cert.pem
-  - SSL_KEYFILE=/app/key.pem
-volumes:
-  - ./cert.pem:/app/cert.pem
-  - ./key.pem:/app/key.pem
-```
+## Security
 
----
+- **Authentication**: All features require login except the initial admin registration.
+- **Admin-only actions**: Deleting customers/equipment/report rows, importing/exporting data, and shutting down require admin privileges.
+- **Brute-force protection**: After 5 failed login attempts within 5 minutes, further attempts are temporarily blocked.
+- **Desktop isolation**: The app runs sandboxed with context isolation; no web server is exposed, no ports are opened, and nothing can be reached from the network.
 
-## Environment Variables
+## Updates
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FLASK_SECRET_KEY` | random | Secret key for session signing |
-| `FLASK_DEBUG` | `false` | Enable Flask debug mode |
-| `SSL_CERTFILE` | none | TLS certificate file path |
-| `SSL_KEYFILE` | none | TLS private key file path |
-| `EQUIPMENT_SEARCH_API_KEY` | none | API key for equipment search |
-| `ADMIN_USERNAME` | none | Auto-create admin on startup |
-| `ADMIN_PASSWORD` | none | Auto-create admin on startup |
-| `DB_PATH` | `database.db` | Path to SQLite database file |
-
----
-
-## Accessing the App
-
-### Local Network
-- Same computer: `http://localhost:5000`
-- Other computers: `http://<your-ip>:5000`
-  - Find your IP: `ipconfig` (Windows) or `ip addr` (Linux)
-
-### Default Port
-The app runs on port 5000. Change with `--port` flag or modify `docker-compose.yml`.
-
----
+New releases are published to GitHub Releases. In-app auto-update is not yet enabled — it requires a code-signed build. Until then, download the new installer or portable exe from Releases. Existing data in `%APPDATA%\Mendure DME\` is preserved across versions.
 
 ## Troubleshooting
 
-### Port Already In Use
+### App won't start
+- Check that another instance isn't already running (single-instance lock).
+- Verify the data folder is writable: `%APPDATA%\Mendure DME\`.
+- If a corrupt database is suspected, move `database.db` aside and restart — a fresh one is created.
+
+### Multiple users on one computer
+Each Windows user gets their own data folder. SQLite is single-machine; the app is designed for one primary user.
+
+### SmartScreen blocks the app
+See [Windows SmartScreen Warning](#windows-smartscreen-warning) above. Code signing is planned, which removes this warning.
+
+## Development
+
 ```bash
-# Windows
-netstat -ano | findstr :5000
-
-# Linux/Mac
-lsof -i :5000
+npm ci
+npm start          # dev mode
+npm test           # jest suite (150 tests)
+npm run dist       # installer + portable exe → dist/
 ```
-
-### Database Lock
-SQLite allows one writer at a time. If you see lock errors:
-- Only one checkout operation at a time per browser
-- Refresh after returning/adding customers
-
-### Docker Won't Start
-```bash
-docker-compose logs -dme-app
-```
-
-### Windows Firewall
-Allow Flask through Windows Firewall when prompted, or manually allow port 5000.
-
-### SmartScreen Blocks the Application
-See the [Windows SmartScreen Warning](#windows-smartscreen-warning) section above.
-
----
-
-## Backup
-
-### Docker (Automated)
-Backups run automatically at 2 AM daily inside the container, stored in the `dme-backups` volume. On startup, a backup is also created. Backups older than 7 days are pruned automatically.
-
-To list backups:
-```bash
-docker exec dme-checkout-app ls -lh /app/backups/
-```
-
-To copy a backup out of the container:
-```bash
-docker cp dme-checkout-app:/app/backups/database_YYYYMMDD_HHMMSS.db ./restore.db
-```
-
-### Local Python
-```bash
-copy database.db database.db.backup
-```
-
-### Standalone .exe
-The `database.db` file is created in the same directory as the executable. Copy it to a safe location:
-```powershell
-copy DME-Checkout\database.db DME-Checkout\database.db.backup
-```
-
----
-
-## Security Notes
-
-- **Authentication**: All pages require login except the initial admin registration.
-- **Admin-only actions**: Deleting customers/equipment, importing/exporting data, and shutting down the application require admin privileges.
-- **Session cookies**: Set to `SameSite=Lax` for CSRF protection.
-- **Brute-force protection**: After 5 failed login attempts within 5 minutes, further attempts are temporarily blocked.
-- **CSRF protection**: All forms include CSRF tokens via Flask-WTF.
-
----
 
 ## Production Considerations
 
-- **SQLite**: Works well for one machine. Not suitable for multi-machine concurrent access.
-- **HTTPS**: Use a reverse proxy (nginx) with valid SSL certificates for internet-facing deployments.
-- **Backups**: Docker environments have automated daily backups (2 AM). Local Python setups should back up `database.db` manually.
-- **Updates**: Pull new code and run `docker-compose up -d --build`; existing database data is preserved in the Docker volume.
-- **Data Safety**: Never run `docker-compose down -v` unless you want to delete all data.
-- **Code Signing**: The .exe is currently unsigned. Consider a code signing certificate (~$80-100/yr) or Microsoft Store publishing ($19 one-time) to eliminate SmartScreen warnings for end users.
+- **SQLite**: suitable for one machine. Not suitable for multi-machine concurrent access.
+- **Backups**: copy `database.db` (app closed) to a safe location on a schedule.
+- **Code Signing**: the exe is currently unsigned. An OV Microsoft Authenticode certificate (e.g., SSL.com eSigner) eliminates SmartScreen warnings and enables in-app auto-updates.

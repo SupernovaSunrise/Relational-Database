@@ -1,4 +1,4 @@
-name: Build DME-Checkout
+name: Build Mendure DME
 
 on:
   push:
@@ -10,54 +10,70 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      PYINSTALLER_COMPILE_BOOTLOADER: 1
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-
-      - name: Install Inno Setup
-        run: choco install InnoSetup -y
+          node-version: 24
+          cache: npm
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: npm ci
 
-      - name: Build PyInstaller bootloader from source
-        run: pip install --force-reinstall --no-binary=PyInstaller PyInstaller
+      - name: Run tests
+        run: npm test -- --runInBand
 
-      - name: Build .exe (onedir)
-        run: pyinstaller build.spec --clean --noconfirm
-
-      - name: Build installer
+      - name: Build installer and portable
         shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          E_SIGNER_ENDPOINT: ${{ secrets.E_SIGNER_ENDPOINT }}
+          E_SIGNER_ACCOUNT: ${{ secrets.E_SIGNER_CODE_SIGNING_ACCOUNT }}
+          E_SIGNER_PROFILE: ${{ secrets.E_SIGNER_CERTIFICATE_PROFILE }}
+          E_SIGNER_PUBLISHER: ${{ secrets.E_SIGNER_PUBLISHER_NAME }}
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" inno_setup.iss
+          $ebArgs = @('--publish', 'never')
+          if ($env:AZURE_TENANT_ID -and $env:AZURE_CLIENT_ID -and $env:AZURE_CLIENT_SECRET -and $env:E_SIGNER_ENDPOINT -and $env:E_SIGNER_ACCOUNT -and $env:E_SIGNER_PROFILE) {
+            $ebArgs += "--config.win.azureSignOptions.endpoint=$env:E_SIGNER_ENDPOINT"
+            $ebArgs += "--config.win.azureSignOptions.codeSigningAccountName=$env:E_SIGNER_ACCOUNT"
+            $ebArgs += "--config.win.azureSignOptions.certificateProfileName=$env:E_SIGNER_PROFILE"
+            if ($env:E_SIGNER_PUBLISHER) {
+              $ebArgs += "--config.win.azureSignOptions.publisherName=$env:E_SIGNER_PUBLISHER"
+            }
+          }
+          npm run dist -- @ebArgs
 
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
-          $exeHash = (Get-FileHash -Path "dist/DME-Checkout/DME-Checkout.exe" -Algorithm SHA256).Hash
-          "$exeHash  DME-Checkout.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
-          if (Test-Path "installer/DME-Checkout-Setup.exe") {
-            $setupHash = (Get-FileHash -Path "installer/DME-Checkout-Setup.exe" -Algorithm SHA256).Hash
-            "$setupHash  DME-Checkout-Setup.exe" | Out-File -Encoding ascii -Append -FilePath "dist/SHA256 checksums.txt"
-          }
+          $setupHash = (Get-FileHash -Path "dist/Mendure-DME-Setup-1.0.0.exe" -Algorithm SHA256).Hash
+          "$setupHash  Mendure-DME-Setup-1.0.0.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
+          $portableHash = (Get-FileHash -Path "dist/Mendure-DME-Portable-1.0.0.exe" -Algorithm SHA256).Hash
+          "$portableHash  Mendure-DME-Portable-1.0.0.exe" | Out-File -Encoding ascii -Append -FilePath "dist/SHA256 checksums.txt"
           Get-Content "dist/SHA256 checksums.txt"
-
-      - name: Upload folder artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: DME-Checkout
-          path: dist/DME-Checkout/
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DME-Checkout-Setup
-          path: installer/DME-Checkout-Setup.exe
+          name: Mendure-DME-Setup
+          path: dist/Mendure-DME-Setup-1.0.0.exe
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mendure-DME-Portable
+          path: dist/Mendure-DME-Portable-1.0.0.exe
+
+      - name: Upload update feed
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-feed
+          path: |
+            dist/latest.yml
+            dist/Mendure-DME-Setup-1.0.0.exe.blockmap
 
       - name: Upload checksums
         uses: actions/upload-artifact@v4
@@ -70,5 +86,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            installer/DME-Checkout-Setup.exe
+            dist/Mendure-DME-Setup-1.0.0.exe
+            dist/Mendure-DME-Setup-1.0.0.exe.blockmap
+            dist/Mendure-DME-Portable-1.0.0.exe
+            dist/latest.yml
             dist/SHA256 checksums.txt

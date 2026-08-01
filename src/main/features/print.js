@@ -8,53 +8,39 @@ function buildPrintDocument(fragment) {
   try {
     css = fs.readFileSync(cssPath, 'utf8');
   } catch (err) {
-    db.log('warn', `print preview css not found at ${cssPath}`);
+    db.log('warn', `print css not found at ${cssPath}`);
   }
-  const toolbar =
-    '<div class="preview-toolbar">' +
-      '<button type="button" onclick="window.print()">Print</button>' +
-      '<button type="button" onclick="window.close()">Close</button>' +
-    '</div>';
   return (
     '<!DOCTYPE html>' +
     '<html lang="en">' +
     '<head>' +
       '<meta charset="UTF-8">' +
       '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; img-src data:;">' +
-      '<title>Print Preview</title>' +
+      '<title>Print</title>' +
       '<style>' +
         css +
-        '.preview-toolbar{position:fixed;top:0;left:0;right:0;z-index:1000;background:#fff;border-bottom:1px solid #ccc;padding:8px 16px;text-align:right;}' +
-        '.preview-toolbar button{margin-left:8px;}' +
-        '.preview-body{padding-top:56px;}' +
         '@media screen{.no-print{display:none !important;}}' +
-        '@media print{.preview-toolbar{display:none !important;}}' +
       '</style>' +
     '</head>' +
     '<body>' +
-      toolbar +
-      '<div class="preview-body">' +
-        fragment +
-      '</div>' +
+      fragment +
     '</body>' +
     '</html>'
   );
 }
 
-function printPreviewHandler(event, payload) {
+function printPdfHandler(event, payload) {
   const electron = require('electron');
-  const { BrowserWindow } = electron;
+  const { BrowserWindow, shell } = electron;
   const html = payload && typeof payload.html === 'string' ? payload.html : '';
   if (!html) return { ok: false, error: 'No printable content provided.' };
-  const parent = BrowserWindow.fromWebContents(event.sender);
   const dir = electron.app.getPath('temp');
-  const filePath = path.join(dir, `dme-print-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
-  fs.writeFileSync(filePath, buildPrintDocument(html), 'utf8');
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const htmlPath = path.join(dir, `dme-print-${suffix}.html`);
+  const pdfPath = path.join(dir, `dme-print-${suffix}.pdf`);
+  fs.writeFileSync(htmlPath, buildPrintDocument(html), 'utf8');
   const win = new BrowserWindow({
-    parent: parent || undefined,
-    width: 1000,
-    height: 1200,
-    title: 'Print Preview',
+    show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -67,15 +53,51 @@ function printPreviewHandler(event, payload) {
   win.webContents.on('will-navigate', (navEvent, url) => {
     if (url !== win.webContents.getURL()) navEvent.preventDefault();
   });
-  win.on('closed', () => {
-    try {
-      fs.unlinkSync(filePath);
-    } catch (err) {}
+  win.webContents.on('did-fail-load', (_event, code, desc) => {
+    db.log('error', `print page load failed: ${code} ${desc}`);
   });
-  win.loadFile(filePath).catch((err) => {
-    db.log('error', `print preview load failed: ${err && err.message ? err.message : err}`);
-  });
-  return { ok: true };
+  return win
+    .loadFile(htmlPath)
+    .then(() =>
+      win.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'Letter',
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      })
+    )
+    .then((data) => {
+      fs.writeFileSync(pdfPath, data);
+      if (!win.isDestroyed()) win.destroy();
+      try {
+        fs.unlinkSync(htmlPath);
+      } catch (err) {}
+      return shell.openPath(pdfPath);
+    })
+    .then((openError) => {
+      if (openError) {
+        db.log('error', `print open failed: ${openError}`);
+        return { ok: false, error: `Could not open the generated PDF: ${openError}` };
+      }
+      setTimeout(() => {
+        try {
+          fs.unlinkSync(pdfPath);
+        } catch (err) {}
+      }, 300000);
+      return { ok: true };
+    })
+    .catch((err) => {
+      try {
+        if (!win.isDestroyed()) win.destroy();
+      } catch (destroyErr) {}
+      try {
+        fs.unlinkSync(htmlPath);
+      } catch (unlinkErr) {}
+      try {
+        fs.unlinkSync(pdfPath);
+      } catch (unlinkErr) {}
+      db.log('error', `print failed: ${err && err.message ? err.message : err}`);
+      return { ok: false, error: 'Print failed.' };
+    });
 }
 
-module.exports = { printPreviewHandler };
+module.exports = { printPreviewHandler: printPdfHandler };

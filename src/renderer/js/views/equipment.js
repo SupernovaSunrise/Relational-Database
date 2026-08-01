@@ -64,16 +64,36 @@
     if (noResults) noResults.hidden = true;
   }
 
-  function onContainerClick(e) {
-    var btn = e.target.closest ? e.target.closest('[data-action]') : null;
-    if (!btn) return;
-    var action = btn.getAttribute('data-action');
+  function openSellModal(equipmentId) {
+    if (document.querySelector('.modal-overlay')) return;
+    var esc = App.escapeHtml;
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="sell-modal-title">' +
+        '<h3 id="sell-modal-title">Enter Sale Price</h3>' +
+        '<p>Selling ' + esc(equipmentId) + '</p>' +
+        '<input type="text" id="sell-price-input" placeholder="e.g., 25.00">' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-secondary" data-modal-action="cancel">Cancel</button>' +
+          '<button type="button" class="btn" data-modal-action="confirm">Sell</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
 
-    if (action === 'sell-equipment') {
-      var equipmentId = btn.getAttribute('data-equipment-id');
-      var priceInput = window.prompt('Enter sale price for ' + equipmentId + ' (e.g., 25.00):');
-      if (priceInput === null || priceInput.trim() === '') return;
-      window.dme.equipmentSell(equipmentId, priceInput.trim()).then(function (res) {
+    var input = overlay.querySelector('#sell-price-input');
+    var close = function () {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+    var confirmSell = function () {
+      var value = input.value.trim();
+      if (!/^\$?\s*\d+(\.\d{1,2})?\s*$/.test(value)) {
+        App.flash('Enter a valid sale price (e.g., 25.00).', 'error');
+        input.focus();
+        return;
+      }
+      close();
+      window.dme.equipmentSell(equipmentId, value).then(function (res) {
         if (res && res.ok) {
           App.flash(res.message || 'Equipment sold successfully.', 'success');
         } else {
@@ -81,6 +101,38 @@
         }
         load();
       });
+    };
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) {
+        close();
+        return;
+      }
+      var btn = e.target.closest ? e.target.closest('[data-modal-action]') : null;
+      if (!btn) return;
+      if (btn.getAttribute('data-modal-action') === 'cancel') {
+        close();
+      } else if (btn.getAttribute('data-modal-action') === 'confirm') {
+        confirmSell();
+      }
+    });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmSell();
+      } else if (e.key === 'Escape') {
+        close();
+      }
+    });
+    input.focus();
+  }
+
+  function onContainerClick(e) {
+    var btn = e.target.closest ? e.target.closest('[data-action]') : null;
+    if (!btn) return;
+    var action = btn.getAttribute('data-action');
+
+    if (action === 'sell-equipment') {
+      openSellModal(btn.getAttribute('data-equipment-id'));
     } else if (action === 'delete-equipment') {
       var equipmentId = btn.getAttribute('data-equipment-id');
       if (!window.confirm('Delete equipment ' + equipmentId + '?')) return;

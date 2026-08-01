@@ -63,6 +63,8 @@
       doExport('importExportExportEquipment', btn.dataset.format);
     } else if (action === 'export-checkout-log') {
       doExport('importExportExportCheckoutLog', btn.dataset.format);
+    } else if (action === 'export-equipment-list') {
+      doExport('importExportExportMaster', btn.dataset.format);
     } else if (action === 'import-customers') {
       doImport('importExportImportCustomers');
     } else if (action === 'import-equipment') {
@@ -135,6 +137,11 @@
             '<select data-format-for="export-checkout-log"><option value="xlsx">.xlsx</option><option value="csv">.csv</option></select>' +
             '<button type="button" class="btn" data-action="export-checkout-log" data-format-for="export-checkout-log">Export Checkout Log</button>' +
           '</div>' +
+          '<div class="export-actions">' +
+            '<span class="export-label">Equipment List</span>' +
+            '<select data-format-for="export-equipment-list"><option value="xlsx">.xlsx</option><option value="csv">.csv</option></select>' +
+            '<button type="button" class="btn" data-action="export-equipment-list" data-format-for="export-equipment-list">Export Equipment List</button>' +
+          '</div>' +
         '</section>' +
         '<section class="control-section">' +
           '<h2>Import Data</h2>' +
@@ -153,7 +160,7 @@
         '<p><strong>Customers:</strong> Columns: Name, Phone, ZipCode (starting from row 2).</p>' +
         '<p><strong>Equipment:</strong> Columns: EquipmentID (format: AA-0000), ItemName (starting from row 2).</p>' +
         '<p><strong>Checkout Log:</strong> Exports all checkout history with: Equipment ID, Item Name, Customer Name, Customer Phone, Date Checked Out, Due Date, Date Returned, Agreement Date.</p>' +
-        '<p><strong>Home Export:</strong> Exports the current equipment list with: Equipment ID, Item Name, Customer Name, Customer Phone, Date Checked Out, Return Date, Status.</p>' +
+        '<p><strong>Equipment List:</strong> Exports the current equipment list with: Equipment ID, Item Name, Customer Name, Customer Phone, Date Checked Out, Return Date, Status.</p>' +
       '</section>';
 
     container.innerHTML = html;

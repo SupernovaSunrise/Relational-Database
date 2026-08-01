@@ -21,10 +21,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+
       - name: Run tests
-        run: npm test -- --runInBand
+        run: npm test
 
       - name: Build installer and portable
+        id: build
         shell: pwsh
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -36,7 +43,9 @@ jobs:
           E_SIGNER_PUBLISHER: ${{ secrets.E_SIGNER_PUBLISHER_NAME }}
         run: |
           $ebArgs = @('--publish', 'never')
+          $signed = $false
           if ($env:AZURE_TENANT_ID -and $env:AZURE_CLIENT_ID -and $env:AZURE_CLIENT_SECRET -and $env:E_SIGNER_ENDPOINT -and $env:E_SIGNER_ACCOUNT -and $env:E_SIGNER_PROFILE) {
+            $signed = $true
             $ebArgs += "--config.win.azureSignOptions.endpoint=$env:E_SIGNER_ENDPOINT"
             $ebArgs += "--config.win.azureSignOptions.codeSigningAccountName=$env:E_SIGNER_ACCOUNT"
             $ebArgs += "--config.win.azureSignOptions.certificateProfileName=$env:E_SIGNER_PROFILE"
@@ -45,35 +54,41 @@ jobs:
             }
           }
           npm run dist -- @ebArgs
+          if ($signed) {
+            echo "signed=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "signed=false" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
-          $setupHash = (Get-FileHash -Path "dist/Mendure-DME-Setup-1.0.0.exe" -Algorithm SHA256).Hash
-          "$setupHash  Mendure-DME-Setup-1.0.0.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
-          $portableHash = (Get-FileHash -Path "dist/Mendure-DME-Portable-1.0.0.exe" -Algorithm SHA256).Hash
-          "$portableHash  Mendure-DME-Portable-1.0.0.exe" | Out-File -Encoding ascii -Append -FilePath "dist/SHA256 checksums.txt"
+          $setupHash = (Get-FileHash -Path "dist/Mendure-DME-Setup-$env:VERSION.exe" -Algorithm SHA256).Hash
+          "$setupHash  Mendure-DME-Setup-$env:VERSION.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
+          $portableHash = (Get-FileHash -Path "dist/Mendure-DME-Portable-$env:VERSION.exe" -Algorithm SHA256).Hash
+          "$portableHash  Mendure-DME-Portable-$env:VERSION.exe" | Out-File -Encoding ascii -Append -FilePath "dist/SHA256 checksums.txt"
           Get-Content "dist/SHA256 checksums.txt"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: Mendure-DME-Setup
-          path: dist/Mendure-DME-Setup-1.0.0.exe
+          path: dist/Mendure-DME-Setup-${{ env.VERSION }}.exe
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
           name: Mendure-DME-Portable
-          path: dist/Mendure-DME-Portable-1.0.0.exe
+          path: dist/Mendure-DME-Portable-${{ env.VERSION }}.exe
 
       - name: Upload update feed
+        if: steps.build.outputs.signed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: update-feed
           path: |
             dist/latest.yml
-            dist/Mendure-DME-Setup-1.0.0.exe.blockmap
+            dist/Mendure-DME-Setup-${{ env.VERSION }}.exe.blockmap
 
       - name: Upload checksums
         uses: actions/upload-artifact@v4
@@ -86,8 +101,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/Mendure-DME-Setup-1.0.0.exe
-            dist/Mendure-DME-Setup-1.0.0.exe.blockmap
-            dist/Mendure-DME-Portable-1.0.0.exe
-            dist/latest.yml
+            dist/Mendure-DME-Setup-${{ env.VERSION }}.exe
+            dist/Mendure-DME-Portable-${{ env.VERSION }}.exe
             dist/SHA256 checksums.txt
+
+      - name: Attach update feed to release
+        if: github.event_name == 'release' && steps.build.outputs.signed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Mendure-DME-Setup-${{ env.VERSION }}.exe.blockmap
+            dist/latest.yml

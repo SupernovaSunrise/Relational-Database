@@ -5,11 +5,11 @@
   "description": "Mendure DME Equipment Checkout Database",
   "main": "src/main/main.js",
   "author": "Mendure DME",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "jest",
+    "test": "jest --runInBand",
     "dist": "electron-builder",
     "dist:portable": "electron-builder --win portable"
   },

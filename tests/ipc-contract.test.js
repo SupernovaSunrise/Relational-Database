@@ -32,9 +32,9 @@ describe('ipc-contract module invariants', () => {
     }
   });
 
-  test('the four public channels are exactly those in REQUIRED_AUTH', () => {
+  test('the three public channels are exactly those in REQUIRED_AUTH', () => {
     expect(Array.from(REQUIRED_AUTH).sort()).toEqual(
-      [CHANNELS.AUTH_REGISTER, CHANNELS.AUTH_LOGIN, CHANNELS.AUTH_GET_SESSION, CHANNELS.APP_GET_STATUS].sort()
+      [CHANNELS.AUTH_REGISTER, CHANNELS.AUTH_LOGIN, CHANNELS.APP_GET_STATUS].sort()
     );
   });
 
@@ -124,10 +124,10 @@ describe('validatePayload', () => {
   });
 
   test('numbers must be integers', () => {
-    expect(ipc.validatePayload(CHANNELS.CUSTOMERS_GET, { id: 1 })).toBe(true);
-    expect(ipc.validatePayload(CHANNELS.CUSTOMERS_GET, { id: 1.5 })).toBe(false);
-    expect(ipc.validatePayload(CHANNELS.CUSTOMERS_GET, { id: '1' })).toBe(false);
-    expect(ipc.validatePayload(CHANNELS.CUSTOMERS_GET, { id: NaN })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.LOANS_RETURN, { loanId: 1 })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.LOANS_RETURN, { loanId: 1.5 })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.LOANS_RETURN, { loanId: '1' })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.LOANS_RETURN, { loanId: NaN })).toBe(false);
   });
 
   test('arrays enforce caps and element types', () => {
@@ -187,13 +187,13 @@ describe('validatePayload', () => {
     expect(ipc.validatePayload(CHANNELS.EQUIPMENT_SELL, { equipmentId: 'AA-0001', salePrice: 25 })).toBe(false);
   });
 
-  test('app:printPreview validates the html payload and caps its size', () => {
-    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: '<h1>Report</h1>' })).toBe(true);
-    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: '' })).toBe(true);
-    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, {})).toBe(false);
-    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: 42 })).toBe(false);
-    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: 'x'.repeat(524288) })).toBe(true);
-    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: 'x'.repeat(524289) })).toBe(false);
+  test('app:print validates the html payload and caps its size', () => {
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT, { html: '<h1>Report</h1>' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT, { html: '' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT, {})).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT, { html: 42 })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT, { html: 'x'.repeat(524288) })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT, { html: 'x'.repeat(524289) })).toBe(false);
   });
 
   test('payloads over MAX_PAYLOAD_BYTES are rejected', () => {

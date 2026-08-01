@@ -133,34 +133,45 @@ function inlineUpdateHandler(event, payload) {
     return { ok: false, error: 'Invalid field' };
   }
   return db.withDb((conn) => {
+    conn.exec('PRAGMA foreign_keys=OFF');
     conn.exec('BEGIN');
+    const fail = (error) => {
+      try {
+        conn.exec('ROLLBACK');
+      } catch (rollbackErr) {}
+      conn.exec('PRAGMA foreign_keys=ON');
+      return { ok: false, error };
+    };
     try {
       if (field === 'equipment_id') {
         const newId = String(value).trim().toUpperCase();
         if (!EQUIPMENT_ID_PATTERN.test(newId)) {
-          conn.exec('ROLLBACK');
-          return { ok: false, error: 'Equipment ID must be in format AA-0000.' };
+          return fail('Equipment ID must be in format AA-0000.');
         }
+        if (newId !== equipmentId && conn.prepare('SELECT 1 FROM equipment WHERE equipment_id = ?').get(newId)) {
+          return fail('Equipment ID already exists.');
+        }
+        conn.prepare('UPDATE equipment SET equipment_id = ? WHERE equipment_id = ?').run(newId, equipmentId);
         conn.prepare('UPDATE loans SET equipment_id = ? WHERE equipment_id = ?').run(newId, equipmentId);
         conn.prepare('UPDATE checkout_log SET equipment_id = ? WHERE equipment_id = ?').run(newId, equipmentId);
         conn.prepare('UPDATE deleted_items_log SET equipment_id = ? WHERE equipment_id = ?').run(newId, equipmentId);
-        conn.prepare('UPDATE equipment SET equipment_id = ? WHERE equipment_id = ?').run(newId, equipmentId);
       } else if (field === 'date_verified') {
         const dateValue = normalizeDateInput(String(value).trim());
         if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
-          conn.exec('ROLLBACK');
-          return { ok: false, error: 'Date must be in YYYY-MM-DD format.' };
+          return fail('Date must be in YYYY-MM-DD format.');
         }
         conn.prepare('UPDATE equipment SET date_verified = ? WHERE equipment_id = ?').run(dateValue, equipmentId);
       } else {
         conn.prepare(`UPDATE equipment SET ${field} = ? WHERE equipment_id = ?`).run(value, equipmentId);
       }
       conn.exec('COMMIT');
+      conn.exec('PRAGMA foreign_keys=ON');
       return { ok: true, success: true };
     } catch (err) {
       try {
         conn.exec('ROLLBACK');
       } catch (rollbackErr) {}
+      conn.exec('PRAGMA foreign_keys=ON');
       throw err;
     }
   });

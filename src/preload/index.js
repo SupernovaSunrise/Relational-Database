@@ -7,17 +7,15 @@ function invoke(channel, payload) {
 const api = {
   appGetStatus: () => invoke('app:getStatus'),
   appShutdown: () => invoke('app:shutdown'),
-  appPrintPreview: (html) => invoke('app:printPreview', { html }),
+  appPrint: (html) => invoke('app:print', { html }),
 
   authRegister: (username, password) => invoke('auth:register', { username, password }),
   authLogin: (username, password) => invoke('auth:login', { username, password }),
   authLogout: () => invoke('auth:logout'),
-  authGetSession: () => invoke('auth:getSession'),
   authChangePassword: (currentPassword, newPassword) => invoke('auth:changePassword', { currentPassword, newPassword }),
 
   customersList: (search) => invoke('customers:list', { search }),
   customersSearch: (query) => invoke('customers:search', { query }),
-  customersGet: (id) => invoke('customers:get', { id }),
   customersAdd: (name, phone, zipCode) => invoke('customers:add', { name, phone, zipCode }),
   customersDelete: (id) => invoke('customers:delete', { id }),
   customersInlineUpdate: (id, field, value) => invoke('customers:inlineUpdate', { id, field, value }),
@@ -31,8 +29,6 @@ const api = {
   loansGetMasterData: () => invoke('loans:getMasterData'),
   loansCheckout: (customerId, equipmentIds, checkoutDate) => invoke('loans:checkout', { customerId, equipmentIds, checkoutDate }),
   loansReturn: (loanId) => invoke('loans:return', { loanId }),
-  loansGetByCustomer: (customerId) => invoke('loans:getByCustomer', { customerId }),
-  loansGetPending: () => invoke('loans:getPending'),
   loansCancelPending: (loanIds) => invoke('loans:cancelPending', { loanIds }),
   loansInlineUpdate: (loanId, field, value) => invoke('loans:inlineUpdate', { loanId, field, value }),
 

@@ -41,11 +41,14 @@ function migrateLegacyDbIfNeeded(targetPath) {
   if (fs.existsSync(targetPath)) return false;
   const legacy = legacyDbPath();
   if (!legacy) return false;
-  if (fs.existsSync(`${legacy}-wal`)) {
-    log('warn', `Legacy database ${legacy} has uncheckpointed WAL data; close the legacy app before first launch of the new version`);
-  }
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.copyFileSync(legacy, targetPath);
+  for (const suffix of ['-wal', '-shm']) {
+    const sidecar = `${legacy}${suffix}`;
+    if (!fs.existsSync(sidecar)) continue;
+    fs.copyFileSync(sidecar, `${targetPath}${suffix}`);
+    log('warn', `Legacy database ${legacy} has a ${suffix} sidecar; copied it to preserve newest rows. Close the legacy app before first launch of the new version`);
+  }
   log('info', `Migrated legacy database from ${legacy} to ${targetPath}`);
   return true;
 }

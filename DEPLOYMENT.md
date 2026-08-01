@@ -49,7 +49,7 @@ If you downloaded from a trusted source (the NW Montana Veterans Stand Down and 
 
 The first launch looks for a legacy `database.db` next to the old exe (or in the project folder) and copies it into the new app data location. It never overwrites existing data.
 
-- **Important**: If the old app is still running, close it first. SQLite WAL data (`database.db-wal`) is not copied; uncheckpointed checkouts would be lost.
+- **Important**: If the old app is still running, close it first. The migration copies the SQLite `-wal`/`-shm` sidecars along with `database.db` so no uncheckpointed checkouts are lost, but copying a live database is never safe.
 - After migration, verify a few recent checkouts appear in the Reports → Checkout Log tab.
 
 ## Data Storage
@@ -104,7 +104,7 @@ See [Windows SmartScreen Warning](#windows-smartscreen-warning) above. Code sign
 ```bash
 npm ci
 npm start          # dev mode
-npm test           # jest suite (150 tests)
+npm test           # jest suite (159 tests)
 npm run dist       # installer + portable exe → dist/
 ```
 

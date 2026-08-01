@@ -65,16 +65,6 @@ function searchHandler(event, payload) {
   });
 }
 
-function getHandler(event, payload) {
-  return db.withDb((conn) => {
-    const row = conn
-      .prepare('SELECT id, name, phone, zip_code, date_added FROM customers WHERE id = ?')
-      .get(payload.id);
-    if (!row) return { ok: false, error: 'Customer not found.' };
-    return { ok: true, item: { ...row } };
-  });
-}
-
 function addHandler(event, payload) {
   const name = String(payload.name).trim();
   const phone = String(payload.phone).trim();
@@ -157,7 +147,6 @@ function inlineUpdateHandler(event, payload) {
 module.exports = {
   listHandler,
   searchHandler,
-  getHandler,
   addHandler,
   deleteHandler,
   inlineUpdateHandler,

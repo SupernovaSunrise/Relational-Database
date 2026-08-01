@@ -15,7 +15,7 @@ function buildPrintDocument(fragment) {
     '<html lang="en">' +
     '<head>' +
       '<meta charset="UTF-8">' +
-      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; img-src data:;">' +
+      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; script-src \'none\'; img-src data:; base-uri \'none\'; form-action \'none\'">' +
       '<title>Print</title>' +
       '<style>' +
         css +
@@ -29,15 +29,19 @@ function buildPrintDocument(fragment) {
   );
 }
 
-function printPdfHandler(event, payload) {
+function printHandler(event, payload) {
   const electron = require('electron');
   const { BrowserWindow, shell } = electron;
   const html = payload && typeof payload.html === 'string' ? payload.html : '';
   if (!html) return { ok: false, error: 'No printable content provided.' };
-  const dir = electron.app.getPath('temp');
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const htmlPath = path.join(dir, `dme-print-${suffix}.html`);
-  const pdfPath = path.join(dir, `dme-print-${suffix}.pdf`);
+  const dir = fs.mkdtempSync(path.join(electron.app.getPath('temp'), 'dme-print-'));
+  const htmlPath = path.join(dir, 'print.html');
+  const pdfPath = path.join(dir, 'print.pdf');
+  const cleanup = () => {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (err) {}
+  };
   fs.writeFileSync(htmlPath, buildPrintDocument(html), 'utf8');
   const win = new BrowserWindow({
     show: false,
@@ -68,36 +72,25 @@ function printPdfHandler(event, payload) {
     .then((data) => {
       fs.writeFileSync(pdfPath, data);
       if (!win.isDestroyed()) win.destroy();
-      try {
-        fs.unlinkSync(htmlPath);
-      } catch (err) {}
       return shell.openPath(pdfPath);
     })
     .then((openError) => {
       if (openError) {
         db.log('error', `print open failed: ${openError}`);
+        cleanup();
         return { ok: false, error: `Could not open the generated PDF: ${openError}` };
       }
-      setTimeout(() => {
-        try {
-          fs.unlinkSync(pdfPath);
-        } catch (err) {}
-      }, 300000);
+      setTimeout(cleanup, 300000);
       return { ok: true };
     })
     .catch((err) => {
       try {
         if (!win.isDestroyed()) win.destroy();
       } catch (destroyErr) {}
-      try {
-        fs.unlinkSync(htmlPath);
-      } catch (unlinkErr) {}
-      try {
-        fs.unlinkSync(pdfPath);
-      } catch (unlinkErr) {}
+      cleanup();
       db.log('error', `print failed: ${err && err.message ? err.message : err}`);
       return { ok: false, error: 'Print failed.' };
     });
 }
 
-module.exports = { printPreviewHandler: printPdfHandler };
+module.exports = { printHandler };

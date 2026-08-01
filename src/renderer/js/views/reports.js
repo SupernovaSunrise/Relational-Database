@@ -272,7 +272,7 @@
 
     container.querySelector('#report-print-btn').addEventListener('click', function () {
       var results = container.querySelector('#report-results');
-      App.printHtml(results ? results.innerHTML : '');
+      App.print(results ? results.innerHTML : '');
     });
 
     container.addEventListener('click', onContainerClick);

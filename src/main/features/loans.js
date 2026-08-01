@@ -132,45 +132,6 @@ function inlineUpdateHandler(event, payload) {
   });
 }
 
-function getByCustomerHandler(event, payload) {
-  return db.withDb((conn) => {
-    const customer = conn
-      .prepare('SELECT id, name, phone, zip_code, date_added FROM customers WHERE id = ?')
-      .get(payload.customerId);
-    if (!customer) return { ok: false, error: 'Customer not found.' };
-    const rows = conn
-      .prepare(
-        'SELECT loans.id, loans.equipment_id, COALESCE(equipment.item_name, loans.item_name) AS item_name, ' +
-        'loans.checked_out_date, loans.due_date, loans.agreement_date, loans.agreement_data ' +
-        'FROM loans LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id ' +
-        'WHERE loans.customer_id = ? AND loans.returned_date IS NULL AND loans.agreement_data IS NOT NULL ' +
-        'ORDER BY loans.checked_out_date, loans.id'
-      )
-      .all(payload.customerId)
-      .map((row) => ({ ...row }));
-    return { ok: true, customer: { ...customer }, items: rows };
-  });
-}
-
-function getPendingHandler(event, payload) {
-  return db.withDb((conn) => {
-    const rows = conn
-      .prepare(
-        'SELECT loans.id, loans.customer_id, customers.name AS customer_name, ' +
-        'loans.equipment_id, COALESCE(equipment.item_name, loans.item_name) AS item_name, ' +
-        'loans.checked_out_date, loans.due_date ' +
-        'FROM loans ' +
-        'LEFT JOIN customers ON loans.customer_id = customers.id ' +
-        'LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id ' +
-        'WHERE loans.agreement_pending = 1 AND loans.returned_date IS NULL ' +
-        'ORDER BY loans.checked_out_date DESC, loans.id'
-      )
-      .all()
-      .map((row) => ({ ...row }));
-    return { ok: true, items: rows };
-  });
-}
-
 function cancelPendingHandler(event, payload) {
   const loanIds = payload.loanIds;
   if (!loanIds.length) {
@@ -205,8 +166,6 @@ module.exports = {
   getMasterDataHandler,
   checkoutHandler,
   returnHandler,
-  getByCustomerHandler,
-  getPendingHandler,
   cancelPendingHandler,
   inlineUpdateHandler,
 };

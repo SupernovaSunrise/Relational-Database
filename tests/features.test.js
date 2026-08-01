@@ -123,15 +123,6 @@ describe('customers feature', () => {
     expect(byZip.items.map((c) => c.name)).toEqual(['Bob Jones']);
   });
 
-  test('getHandler returns one customer or a not-found error', () => {
-    seedCustomer('Alice Smith', '(406) 555-1234', '59901');
-    const found = customers.getHandler(evt, { id: 1 });
-    expect(found.ok).toBe(true);
-    expect(found.item.name).toBe('Alice Smith');
-    expect(found.item.date_added).toBe(todayIso());
-    expect(customers.getHandler(evt, { id: 999 })).toEqual({ ok: false, error: 'Customer not found.' });
-  });
-
   test('inlineUpdateHandler validates the field name and phone rules', () => {
     seedCustomer('Alice Smith', '(406) 555-1234', '59901');
     seedCustomer('Bob Jones', '(406) 555-9876', '59001');
@@ -361,13 +352,23 @@ describe('equipment feature', () => {
     expect(db.withDb((conn) => conn.prepare("SELECT COUNT(*) AS c FROM equipment WHERE equipment_id = 'AA-0001'").get().c)).toBe(0);
   });
 
-  test('equipment_id rename against rows referencing the old id currently fails on the FK constraint', () => {
+  test('equipment_id rename updates loans, checkout_log, and equipment in one transaction', () => {
     seedEquipment('AA-0001', 'Walker');
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
-    loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
-    expect(() =>
-      equipment.inlineUpdateHandler(evt, { equipmentId: 'AA-0001', field: 'equipment_id', value: 'AA-0002' })
-    ).toThrow(/FOREIGN KEY constraint failed/);
+    checkoutAndAgree(customerId, ['AA-0001'], '2024-03-01', '03/01/2024');
+    const renamed = equipment.inlineUpdateHandler(evt, { equipmentId: 'AA-0001', field: 'equipment_id', value: 'AA-0002' });
+    expect(renamed).toEqual({ ok: true, success: true });
+    expect(db.withDb((conn) => conn.prepare('SELECT equipment_id FROM loans').all())).toEqual([{ equipment_id: 'AA-0002' }]);
+    expect(db.withDb((conn) => conn.prepare('SELECT equipment_id FROM checkout_log').all())).toEqual([{ equipment_id: 'AA-0002' }]);
+    expect(db.withDb((conn) => conn.prepare('SELECT equipment_id FROM equipment').all())).toEqual([{ equipment_id: 'AA-0002' }]);
+  });
+
+  test('equipment_id rename rejects an id that already exists', () => {
+    seedEquipment('AA-0001', 'Walker');
+    seedEquipment('BB-0002', 'Wheelchair');
+    const result = equipment.inlineUpdateHandler(evt, { equipmentId: 'AA-0001', field: 'equipment_id', value: 'BB-0002' });
+    expect(result).toEqual({ ok: false, error: 'Equipment ID already exists.' });
+    expect(db.withDb((conn) => conn.prepare("SELECT COUNT(*) AS c FROM equipment WHERE equipment_id = 'AA-0001'").get().c)).toBe(1);
   });
 });
 
@@ -476,21 +477,6 @@ describe('loans feature', () => {
     });
   });
 
-  test('getPendingHandler lists pending loans and getByCustomerHandler requires signed agreements', () => {
-    seedEquipment('AA-0001', 'Walker');
-    seedEquipment('BB-0002', 'Wheelchair');
-    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
-    expect(loans.getPendingHandler(evt, {}).items).toEqual([]);
-    expect(loans.getByCustomerHandler(evt, { customerId }).ok).toBe(true);
-    expect(loans.getByCustomerHandler(evt, { customerId }).items).toEqual([]);
-    loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
-    const pending = loans.getPendingHandler(evt, {});
-    expect(pending.items).toHaveLength(1);
-    expect(pending.items[0].equipment_id).toBe('AA-0001');
-    expect(pending.items[0].customer_name).toBe('Alice Smith');
-    expect(loans.getByCustomerHandler(evt, { customerId: 999 })).toEqual({ ok: false, error: 'Customer not found.' });
-  });
-
   test('returnHandler sets the returned date and frees the equipment', () => {
     seedEquipment('AA-0001', 'Walker');
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
@@ -509,10 +495,9 @@ describe('loans feature', () => {
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
     expect(loans.cancelPendingHandler(evt, { loanIds: [] }).ok).toBe(true);
     loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001', 'BB-0002'], checkoutDate: '2024-03-01' });
-    expect(loans.getPendingHandler(evt, {}).items).toHaveLength(2);
+    expect(db.withDb((conn) => conn.prepare('SELECT COUNT(*) AS c FROM loans WHERE agreement_pending = 1').get().c)).toBe(2);
     const cancelled = loans.cancelPendingHandler(evt, { loanIds: [1, 2] });
     expect(cancelled.ok).toBe(true);
-    expect(loans.getPendingHandler(evt, {}).items).toEqual([]);
     expect(db.withDb((conn) => conn.prepare('SELECT COUNT(*) AS c FROM loans').get().c)).toBe(0);
   });
 
@@ -583,7 +568,7 @@ describe('agreements feature', () => {
     });
     expect(submit.ok).toBe(true);
     expect(submit.updatedLoanIds).toEqual([1, 2]);
-    expect(loans.getPendingHandler(evt, {}).items).toEqual([]);
+    expect(db.withDb((conn) => conn.prepare('SELECT COUNT(*) AS c FROM loans WHERE agreement_pending = 1').get().c)).toBe(0);
 
     const loanRows = db.withDb((conn) =>
       conn.prepare('SELECT checked_out_date, due_date, agreement_data, agreement_date, agreement_pending FROM loans ORDER BY id').all()

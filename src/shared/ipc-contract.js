@@ -1,17 +1,15 @@
 const CHANNELS = Object.freeze({
   APP_GET_STATUS: 'app:getStatus',
   APP_SHUTDOWN: 'app:shutdown',
-  APP_PRINT_PREVIEW: 'app:printPreview',
+  APP_PRINT: 'app:print',
 
   AUTH_REGISTER: 'auth:register',
   AUTH_LOGIN: 'auth:login',
   AUTH_LOGOUT: 'auth:logout',
-  AUTH_GET_SESSION: 'auth:getSession',
   AUTH_CHANGE_PASSWORD: 'auth:changePassword',
 
   CUSTOMERS_LIST: 'customers:list',
   CUSTOMERS_SEARCH: 'customers:search',
-  CUSTOMERS_GET: 'customers:get',
   CUSTOMERS_ADD: 'customers:add',
   CUSTOMERS_DELETE: 'customers:delete',
   CUSTOMERS_INLINE_UPDATE: 'customers:inlineUpdate',
@@ -25,8 +23,6 @@ const CHANNELS = Object.freeze({
   LOANS_GET_MASTER_DATA: 'loans:getMasterData',
   LOANS_CHECKOUT: 'loans:checkout',
   LOANS_RETURN: 'loans:return',
-  LOANS_GET_BY_CUSTOMER: 'loans:getByCustomer',
-  LOANS_GET_PENDING: 'loans:getPending',
   LOANS_CANCEL_PENDING: 'loans:cancelPending',
   LOANS_INLINE_UPDATE: 'loans:inlineUpdate',
 
@@ -50,15 +46,13 @@ const CHANNELS = Object.freeze({
 const PAYLOADS = Object.freeze({
   [CHANNELS.APP_GET_STATUS]: {},
   [CHANNELS.APP_SHUTDOWN]: {},
-  [CHANNELS.APP_PRINT_PREVIEW]: { html: 'string:524288' },
+  [CHANNELS.APP_PRINT]: { html: 'string:524288' },
   [CHANNELS.AUTH_REGISTER]: { username: 'string:64', password: 'string:4096' },
   [CHANNELS.AUTH_LOGIN]: { username: 'string:64', password: 'string:4096' },
   [CHANNELS.AUTH_LOGOUT]: {},
-  [CHANNELS.AUTH_GET_SESSION]: {},
   [CHANNELS.AUTH_CHANGE_PASSWORD]: { currentPassword: 'string:4096', newPassword: 'string:4096' },
   [CHANNELS.CUSTOMERS_LIST]: { search: 'string:255?' },
   [CHANNELS.CUSTOMERS_SEARCH]: { query: 'string:255' },
-  [CHANNELS.CUSTOMERS_GET]: { id: 'number' },
   [CHANNELS.CUSTOMERS_ADD]: { name: 'string:255', phone: 'string:32', zipCode: 'string:16' },
   [CHANNELS.CUSTOMERS_DELETE]: { id: 'number' },
   [CHANNELS.CUSTOMERS_INLINE_UPDATE]: { id: 'number', field: 'string:64', value: 'string:255' },
@@ -70,8 +64,6 @@ const PAYLOADS = Object.freeze({
   [CHANNELS.LOANS_GET_MASTER_DATA]: {},
   [CHANNELS.LOANS_CHECKOUT]: { customerId: 'number', equipmentIds: 'string[]:50', checkoutDate: 'string:32?' },
   [CHANNELS.LOANS_RETURN]: { loanId: 'number' },
-  [CHANNELS.LOANS_GET_BY_CUSTOMER]: { customerId: 'number' },
-  [CHANNELS.LOANS_GET_PENDING]: {},
   [CHANNELS.LOANS_CANCEL_PENDING]: { loanIds: 'number[]:50' },
   [CHANNELS.LOANS_INLINE_UPDATE]: { loanId: 'number', field: 'string:64', value: 'string:32' },
   [CHANNELS.AGREEMENTS_GET_LOAN]: { loanId: 'number' },
@@ -84,7 +76,7 @@ const PAYLOADS = Object.freeze({
     agreementDate: 'string:32',
     waiverAgreed: 'boolean',
     signatureAgreed: 'boolean',
-    signatureData: 'string:2000000',
+    signatureData: 'string:900000',
   },
   [CHANNELS.REPORTS_GET_YEARS]: {},
   [CHANNELS.REPORTS_GET_DATA]: {
@@ -109,7 +101,6 @@ const MAX_PAYLOAD_BYTES = 1024 * 1024;
 const REQUIRED_AUTH = Object.freeze(new Set([
   CHANNELS.AUTH_REGISTER,
   CHANNELS.AUTH_LOGIN,
-  CHANNELS.AUTH_GET_SESSION,
   CHANNELS.APP_GET_STATUS,
 ]));
 

@@ -118,17 +118,15 @@ function registerIpcHandlers() {
     return { ok: true };
   });
 
-  registerChannel(CHANNELS.APP_PRINT_PREVIEW, print.printPreviewHandler);
+  registerChannel(CHANNELS.APP_PRINT, print.printHandler);
 
   registerChannel(CHANNELS.AUTH_REGISTER, auth.registerHandler);
   registerChannel(CHANNELS.AUTH_LOGIN, auth.loginHandler);
   registerChannel(CHANNELS.AUTH_LOGOUT, auth.logoutHandler);
-  registerChannel(CHANNELS.AUTH_GET_SESSION, auth.getSessionHandler);
   registerChannel(CHANNELS.AUTH_CHANGE_PASSWORD, auth.changePasswordHandler);
 
   registerChannel(CHANNELS.CUSTOMERS_LIST, customers.listHandler);
   registerChannel(CHANNELS.CUSTOMERS_SEARCH, customers.searchHandler);
-  registerChannel(CHANNELS.CUSTOMERS_GET, customers.getHandler);
   registerChannel(CHANNELS.CUSTOMERS_ADD, customers.addHandler);
   registerChannel(CHANNELS.CUSTOMERS_DELETE, customers.deleteHandler);
   registerChannel(CHANNELS.CUSTOMERS_INLINE_UPDATE, customers.inlineUpdateHandler);
@@ -142,8 +140,6 @@ function registerIpcHandlers() {
   registerChannel(CHANNELS.LOANS_GET_MASTER_DATA, loans.getMasterDataHandler);
   registerChannel(CHANNELS.LOANS_CHECKOUT, loans.checkoutHandler);
   registerChannel(CHANNELS.LOANS_RETURN, loans.returnHandler);
-  registerChannel(CHANNELS.LOANS_GET_BY_CUSTOMER, loans.getByCustomerHandler);
-  registerChannel(CHANNELS.LOANS_GET_PENDING, loans.getPendingHandler);
   registerChannel(CHANNELS.LOANS_CANCEL_PENDING, loans.cancelPendingHandler);
   registerChannel(CHANNELS.LOANS_INLINE_UPDATE, loans.inlineUpdateHandler);
 

@@ -276,13 +276,6 @@ describe('session management', () => {
     auth.clearSession();
     expect(auth.getSession()).toBeNull();
   });
-
-  test('getSessionHandler returns the session user', () => {
-    auth.clearSession();
-    expect(auth.getSessionHandler(fakeEvent(1))).toEqual({ ok: true, user: null });
-    auth.setSession({ id: 3, username: 'bob', isAdmin: 0 });
-    expect(auth.getSessionHandler(fakeEvent(1))).toEqual({ ok: true, user: { id: 3, username: 'bob', isAdmin: 0 } });
-  });
 });
 
 describe('logoutHandler', () => {

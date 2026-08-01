@@ -217,7 +217,7 @@
       });
 
       cardBody.querySelector('#agreement-print-btn').addEventListener('click', function () {
-        App.printHtml(cardBody.innerHTML);
+        App.print(cardBody.innerHTML);
       });
 
       cardBody.querySelector('#agreement-cancel-btn').addEventListener('click', function () {
@@ -326,7 +326,7 @@
       var printBtn = cardBody.querySelector('#agreement-print-btn');
       if (printBtn) {
         printBtn.addEventListener('click', function () {
-          App.printHtml(cardBody.innerHTML);
+          App.print(cardBody.innerHTML);
         });
       }
     });

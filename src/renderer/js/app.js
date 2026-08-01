@@ -194,10 +194,10 @@
     if (el && el.matches && el.matches('input[data-phone]')) el.value = formatPhone(el.value);
   });
 
-  function printHtml(html) {
-    window.dme.appPrintPreview(html).then(function (res) {
+  function print(html) {
+    window.dme.appPrint(html).then(function (res) {
       if (!res || !res.ok) {
-        flash((res && res.error) || 'Failed to open print preview.', 'error');
+        flash((res && res.error) || 'Failed to open the PDF printout.', 'error');
       }
     });
   }
@@ -224,7 +224,7 @@
     normalizePhone: normalizePhone,
     formatPhone: formatPhone,
     escapeHtml: escapeHtml,
-    printHtml: printHtml,
+    print: print,
     navigate: navigate,
     logout: logout,
     initInlineEditing: initInlineEditing,

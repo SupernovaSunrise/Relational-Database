@@ -112,7 +112,6 @@
   }
 
   window.AppViews = window.AppViews || {};
-  window.AppViews.auth = { init: init };
   window.AppViews.login = { init: init };
   window.AppViews.register = { init: init };
 })();

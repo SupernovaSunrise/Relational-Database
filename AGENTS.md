@@ -53,8 +53,7 @@ npm start
 
 ### Test
 ```bash
-npm test                 # jest, all suites
-npm test -- --runInBand  # use when sqlite WAL conflicts occur
+npm test                 # jest, all suites (already runs --runInBand)
 ```
 
 ### Build Windows artifacts
@@ -66,11 +65,12 @@ npm run dist:portable   # portable only
 
 ### Build (CI)
 Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
-1. `npm ci` + jest (all 150 tests)
+1. `npm ci` + jest (all 159 tests)
 2. `npm run dist` (unsigned unless signing secrets are present)
 3. Generates `SHA256 checksums.txt`
-4. Uploads artifacts (installer, portable, update feed `latest.yml` + blockmap, checksums)
-5. On GitHub `release` events, attaches everything to the release (serves the auto-update feed)
+4. Uploads artifacts (installer, portable, checksums)
+5. The update feed (`latest.yml` + blockmap) is uploaded/attached ONLY when code-signing secrets are present — unsigned builds must not publish a feed
+6. On GitHub `release` events, attaches the executables + checksums to the release; feed files attach only when signed
 
 ## Code Conventions
 
@@ -92,7 +92,7 @@ Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
 - **Auth**: werkzeug-compatible password hashes — verifies `pbkdf2:sha256:<iter>` AND `scrypt:n:r:p` (legacy Flask DBs may contain either); new hashes `pbkdf2:sha256:600000`. Brute-force: 5 failed logins / 300s keyed by webContents id. First registered user gets admin.
 - **Renderer**: strict CSP (no inline scripts/styles, no eval, `connect-src 'none'`), XSS contained by escaping, no Node access
 - **Data**: SQLite at `app.getPath('userData')/database.db`, unencrypted (same exposure class as legacy), WAL sidecars hold newest rows
-- **Migration**: first run copies legacy `database.db` (exe-adjacent, else project root) into userData — never overwrites an existing target; warns if legacy `-wal` sidecar exists
+- **Migration**: first run copies legacy `database.db` (exe-adjacent, else project root) into userData along with any `-wal`/`-shm` sidecars — never overwrites an existing target
 
 ## Important Notes
 
@@ -106,7 +106,7 @@ Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
 
 ## Testing
 
-Jest suites in `tests/` (`*.test.js`), 150 tests / 5 suites:
+Jest suites in `tests/` (`*.test.js`), 159 tests / 5 suites:
 - `business-logic.test.js` — 990-case parity fixture vs real Python db.py (2020–2040 holidays/due dates), phones, dates, escape
 - `auth.test.js` — werkzeug 2.3.7 pbkdf2 + 3.1.3 scrypt hash vectors, register/login/rate-limit/session/change-password
 - `ipc-contract.test.js` — payload validation fail-closed, sender gate, REQUIRED_AUTH/ADMIN invariants, full handler pipeline

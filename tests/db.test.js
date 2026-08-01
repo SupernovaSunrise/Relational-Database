@@ -16,6 +16,7 @@ const { makeTempDir, cleanupDir } = require('./helpers');
 const repoRootDb = path.join(__dirname, '..', 'database.db');
 const realStatSync = jest.requireActual('fs').statSync;
 const realCopyFileSync = jest.requireActual('fs').copyFileSync;
+const realExistsSync = jest.requireActual('fs').existsSync;
 
 const EXPECTED_TABLES = {
   users: [
@@ -288,6 +289,27 @@ describe('migrateLegacyDbIfNeeded', () => {
     });
     expect(db.migrateLegacyDbIfNeeded(target)).toBe(true);
     expect(fs.readFileSync(target, 'utf8')).toBe('legacy database content');
+    cleanupDir(dir);
+  });
+
+  test('copies -wal and -shm sidecars to preserve newest rows', () => {
+    const dir = makeTempDir();
+    const target = path.join(dir, 'database.db');
+    fs.statSync.mockImplementation((p) => {
+      if (p === repoRootDb || p === `${repoRootDb}-wal` || p === `${repoRootDb}-shm`) return { isFile: () => true };
+      return realStatSync(p);
+    });
+    const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockImplementation((p) => {
+      if (p === `${repoRootDb}-wal` || p === `${repoRootDb}-shm`) return true;
+      return realExistsSync(p);
+    });
+    fs.copyFileSync.mockImplementation((src, dest) => {
+      fs.writeFileSync(dest, `copy of ${path.basename(src)}`);
+    });
+    expect(db.migrateLegacyDbIfNeeded(target)).toBe(true);
+    expect(fs.readFileSync(`${target}-wal`, 'utf8')).toBe('copy of database.db-wal');
+    expect(fs.readFileSync(`${target}-shm`, 'utf8')).toBe('copy of database.db-shm');
+    existsSyncSpy.mockRestore();
     cleanupDir(dir);
   });
 

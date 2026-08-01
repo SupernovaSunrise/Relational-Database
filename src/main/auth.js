@@ -167,10 +167,6 @@ function changePasswordHandler(event, payload) {
   return { ok: true, message: 'Password changed successfully.' };
 }
 
-function getSessionHandler(event) {
-  return { ok: true, user: currentUser };
-}
-
 module.exports = {
   hashPassword,
   verifyPassword,
@@ -184,7 +180,6 @@ module.exports = {
   loginHandler,
   logoutHandler,
   changePasswordHandler,
-  getSessionHandler,
   LOGIN_FAILED_LIMIT,
   LOGIN_FAILED_PERIOD,
 };

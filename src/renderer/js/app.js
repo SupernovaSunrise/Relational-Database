@@ -194,6 +194,14 @@
     if (el && el.matches && el.matches('input[data-phone]')) el.value = formatPhone(el.value);
   });
 
+  function printHtml(html) {
+    window.dme.appPrintPreview(html).then(function (res) {
+      if (!res || !res.ok) {
+        flash((res && res.error) || 'Failed to open print preview.', 'error');
+      }
+    });
+  }
+
   function boot() {
     if (!window.dme) {
       viewContainer.innerHTML = '<p>Renderer bridge unavailable.</p>';
@@ -216,6 +224,7 @@
     normalizePhone: normalizePhone,
     formatPhone: formatPhone,
     escapeHtml: escapeHtml,
+    printHtml: printHtml,
     navigate: navigate,
     logout: logout,
     initInlineEditing: initInlineEditing,

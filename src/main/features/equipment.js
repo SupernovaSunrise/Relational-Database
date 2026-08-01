@@ -74,15 +74,12 @@ function deleteHandler(event, payload) {
     if (!row) {
       return { ok: false, error: `Equipment ${equipmentId} does not exist.` };
     }
+    conn.exec('PRAGMA foreign_keys=OFF');
     conn.exec('BEGIN');
     try {
-      conn
-        .prepare('DELETE FROM customer_agreements WHERE loan_id IN (SELECT id FROM loans WHERE equipment_id = ?)')
-        .run(equipmentId);
-      conn.prepare('DELETE FROM loans WHERE equipment_id = ?').run(equipmentId);
-      conn.prepare('DELETE FROM checkout_log WHERE equipment_id = ?').run(equipmentId);
       conn.prepare('DELETE FROM equipment WHERE equipment_id = ?').run(equipmentId);
       conn.exec('COMMIT');
+      conn.exec('PRAGMA foreign_keys=ON');
       return { ok: true, message: 'Equipment deleted successfully.' };
     } catch (err) {
       try {
@@ -111,18 +108,15 @@ function sellHandler(event, payload) {
       return { ok: false, error: `Equipment ${equipmentId} does not exist.` };
     }
     const itemName = row.item_name ? row.item_name : equipmentId;
+    conn.exec('PRAGMA foreign_keys=OFF');
     conn.exec('BEGIN');
     try {
       conn
         .prepare('INSERT INTO deleted_items_log (equipment_id, item_name, deletion_date, sale_price) VALUES (?, ?, ?, ?)')
         .run(equipmentId, itemName, todayIso(), salePrice);
-      conn
-        .prepare('DELETE FROM customer_agreements WHERE loan_id IN (SELECT id FROM loans WHERE equipment_id = ?)')
-        .run(equipmentId);
-      conn.prepare('DELETE FROM loans WHERE equipment_id = ?').run(equipmentId);
-      conn.prepare('DELETE FROM checkout_log WHERE equipment_id = ?').run(equipmentId);
       conn.prepare('DELETE FROM equipment WHERE equipment_id = ?').run(equipmentId);
       conn.exec('COMMIT');
+      conn.exec('PRAGMA foreign_keys=ON');
       return { ok: true, message: `Equipment ${equipmentId} sold for $${salePrice}.` };
     } catch (err) {
       try {

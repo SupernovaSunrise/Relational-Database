@@ -153,6 +153,7 @@
         '<p><strong>Customers:</strong> Columns: Name, Phone, ZipCode (starting from row 2).</p>' +
         '<p><strong>Equipment:</strong> Columns: EquipmentID (format: AA-0000), ItemName (starting from row 2).</p>' +
         '<p><strong>Checkout Log:</strong> Exports all checkout history with: Equipment ID, Item Name, Customer Name, Customer Phone, Date Checked Out, Due Date, Date Returned, Agreement Date.</p>' +
+        '<p><strong>Home Export:</strong> Exports the current equipment list with: Equipment ID, Item Name, Customer Name, Customer Phone, Date Checked Out, Return Date, Status.</p>' +
       '</section>';
 
     container.innerHTML = html;

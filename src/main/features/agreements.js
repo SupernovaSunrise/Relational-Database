@@ -5,7 +5,7 @@ function getLoanHandler(event, payload) {
   return db.withDb((conn) => {
     const loan = conn
       .prepare(
-        'SELECT loans.id, loans.customer_id, loans.equipment_id, equipment.item_name, ' +
+        'SELECT loans.id, loans.customer_id, loans.equipment_id, COALESCE(equipment.item_name, loans.item_name) AS item_name, ' +
         'loans.checked_out_date, loans.due_date, loans.agreement_date, loans.agreement_data, ' +
         'loans.agreement_pending, loans.returned_date ' +
         'FROM loans LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id ' +
@@ -39,8 +39,8 @@ function getCustomerHandler(event, payload) {
     if (!customer) return { ok: false, error: 'Customer not found.' };
     const rows = conn
       .prepare(
-        'SELECT loans.id, loans.equipment_id, equipment.item_name, loans.checked_out_date, ' +
-        'loans.due_date, loans.agreement_date, loans.agreement_data ' +
+        'SELECT loans.id, loans.equipment_id, COALESCE(equipment.item_name, loans.item_name) AS item_name, ' +
+        'loans.checked_out_date, loans.due_date, loans.agreement_date, loans.agreement_data ' +
         'FROM loans LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id ' +
         'WHERE loans.customer_id = ? AND loans.returned_date IS NULL AND loans.agreement_data IS NOT NULL ' +
         'ORDER BY loans.checked_out_date, loans.id'

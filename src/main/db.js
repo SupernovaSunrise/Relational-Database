@@ -111,6 +111,9 @@ function initDb(dbPath) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id INTEGER NOT NULL,
         equipment_id TEXT NOT NULL,
+        item_name TEXT,
+        customer_name TEXT,
+        customer_phone TEXT,
         checked_out_date TEXT NOT NULL,
         due_date TEXT NOT NULL,
         returned_date TEXT,
@@ -172,6 +175,15 @@ function initDb(dbPath) {
     if (!loanColumns.includes('agreement_pending')) {
       conn.exec('ALTER TABLE loans ADD COLUMN agreement_pending INTEGER NOT NULL DEFAULT 0');
     }
+    if (!loanColumns.includes('item_name')) {
+      conn.exec('ALTER TABLE loans ADD COLUMN item_name TEXT');
+    }
+    if (!loanColumns.includes('customer_name')) {
+      conn.exec('ALTER TABLE loans ADD COLUMN customer_name TEXT');
+    }
+    if (!loanColumns.includes('customer_phone')) {
+      conn.exec('ALTER TABLE loans ADD COLUMN customer_phone TEXT');
+    }
     const equipmentColumns = tableColumns(conn, 'equipment');
     if (!equipmentColumns.includes('date_verified')) {
       conn.exec('ALTER TABLE equipment ADD COLUMN date_verified TEXT');
@@ -189,6 +201,14 @@ function initDb(dbPath) {
       const formatted = formatPhone(row.phone);
       if (formatted !== row.phone) updatePhone.run(formatted, row.id);
     }
+    conn.exec(
+      'UPDATE loans SET item_name = COALESCE((SELECT item_name FROM equipment WHERE equipment_id = loans.equipment_id), loans.equipment_id) WHERE item_name IS NULL'
+    );
+    conn.exec(
+      'UPDATE loans SET customer_name = (SELECT name FROM customers WHERE id = loans.customer_id), ' +
+      'customer_phone = (SELECT phone FROM customers WHERE id = loans.customer_id) ' +
+      'WHERE customer_name IS NULL OR customer_phone IS NULL'
+    );
   } finally {
     conn.close();
   }

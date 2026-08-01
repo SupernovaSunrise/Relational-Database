@@ -7,6 +7,7 @@ function invoke(channel, payload) {
 const api = {
   appGetStatus: () => invoke('app:getStatus'),
   appShutdown: () => invoke('app:shutdown'),
+  appPrintPreview: (html) => invoke('app:printPreview', { html }),
 
   authRegister: (username, password) => invoke('auth:register', { username, password }),
   authLogin: (username, password) => invoke('auth:login', { username, password }),
@@ -47,6 +48,7 @@ const api = {
   importExportExportCustomers: (format) => invoke('importExport:exportCustomers', { format }),
   importExportExportEquipment: (format) => invoke('importExport:exportEquipment', { format }),
   importExportExportCheckoutLog: (format) => invoke('importExport:exportCheckoutLog', { format }),
+  importExportExportMaster: (format) => invoke('importExport:exportMaster', { format }),
   importExportImportCustomers: (path) => invoke('importExport:importCustomers', { path }),
   importExportImportEquipment: (path) => invoke('importExport:importEquipment', { path }),
 };

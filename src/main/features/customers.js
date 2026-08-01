@@ -116,17 +116,12 @@ function deleteHandler(event, payload) {
     if (active) {
       return { ok: false, error: 'Cannot delete customer while they have active checked out equipment.' };
     }
+    conn.exec('PRAGMA foreign_keys=OFF');
     conn.exec('BEGIN');
     try {
-      conn.prepare('DELETE FROM customer_agreements WHERE customer_id = ?').run(payload.id);
-      conn
-        .prepare(
-          'DELETE FROM checkout_log WHERE equipment_id IN (SELECT equipment_id FROM loans WHERE customer_id = ?)'
-        )
-        .run(payload.id);
-      conn.prepare('DELETE FROM loans WHERE customer_id = ?').run(payload.id);
       conn.prepare('DELETE FROM customers WHERE id = ?').run(payload.id);
       conn.exec('COMMIT');
+      conn.exec('PRAGMA foreign_keys=ON');
       return { ok: true, message: 'Customer deleted successfully.' };
     } catch (err) {
       try {

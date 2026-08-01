@@ -284,6 +284,16 @@
       App.navigate('agreement', { mode: 'view', customerId: btn.getAttribute('data-customer-id') });
     } else if (action === 'candidate-select') {
       doCheckout(Number(btn.getAttribute('data-customer-id')), module.pendingEquipmentIds);
+    } else if (action === 'export-master') {
+      var formatSelect = module.container.querySelector('#master-export-format');
+      var format = formatSelect ? formatSelect.value : 'xlsx';
+      window.dme.importExportExportMaster(format).then(function (res) {
+        if (res && res.ok) {
+          App.flash('Export saved to ' + res.path, 'success');
+        } else {
+          App.flash((res && res.error) || 'Export failed.', 'error');
+        }
+      });
     }
   }
 
@@ -417,6 +427,15 @@
           '<label for="master-date-to">Checked Out To</label>' +
           '<input type="date" id="master-date-to">' +
         '</div>' +
+        (App.isAdmin()
+          ? '<div class="form-group form-group-fixed">' +
+              '<label for="master-export-format">Export</label>' +
+              '<div class="export-actions">' +
+                '<select id="master-export-format"><option value="xlsx">.xlsx</option><option value="csv">.csv</option></select>' +
+                '<button type="button" class="btn" data-action="export-master">Export Table</button>' +
+              '</div>' +
+            '</div>'
+          : '') +
       '</div>' +
 
       '<div class="tab-bar" id="master-tabs"></div>' +

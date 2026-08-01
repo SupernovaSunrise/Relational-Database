@@ -8,6 +8,7 @@ const loans = require('./features/loans');
 const agreements = require('./features/agreements');
 const reports = require('./features/reports');
 const importExport = require('./features/import-export');
+const print = require('./features/print');
 
 let trustedWebContentsId = null;
 
@@ -117,6 +118,8 @@ function registerIpcHandlers() {
     return { ok: true };
   });
 
+  registerChannel(CHANNELS.APP_PRINT_PREVIEW, print.printPreviewHandler);
+
   registerChannel(CHANNELS.AUTH_REGISTER, auth.registerHandler);
   registerChannel(CHANNELS.AUTH_LOGIN, auth.loginHandler);
   registerChannel(CHANNELS.AUTH_LOGOUT, auth.logoutHandler);
@@ -156,6 +159,7 @@ function registerIpcHandlers() {
   registerChannel(CHANNELS.IMPORT_EXPORT_EXPORT_CUSTOMERS, importExport.exportCustomersHandler);
   registerChannel(CHANNELS.IMPORT_EXPORT_EXPORT_EQUIPMENT, importExport.exportEquipmentHandler);
   registerChannel(CHANNELS.IMPORT_EXPORT_EXPORT_CHECKOUT_LOG, importExport.exportCheckoutLogHandler);
+  registerChannel(CHANNELS.IMPORT_EXPORT_EXPORT_MASTER, importExport.exportMasterHandler);
   registerChannel(CHANNELS.IMPORT_EXPORT_IMPORT_CUSTOMERS, importExport.importCustomersHandler);
   registerChannel(CHANNELS.IMPORT_EXPORT_IMPORT_EQUIPMENT, importExport.importEquipmentHandler);
 }

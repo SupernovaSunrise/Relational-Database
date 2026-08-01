@@ -161,7 +161,7 @@ describe('customers feature', () => {
     expect(result.error).toBe('Cannot delete customer while they have active checked out equipment.');
   });
 
-  test('deleteHandler removes customers, their loans, agreements, and checkout log entries', () => {
+  test('deleteHandler removes the customer but preserves checkout history', () => {
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
     seedEquipment('AA-0001', 'Walker');
     checkoutAndAgree(customerId, ['AA-0001'], '2024-03-01', '2024-03-01');
@@ -174,7 +174,7 @@ describe('customers feature', () => {
       agreements: conn.prepare('SELECT COUNT(*) AS c FROM customer_agreements').get().c,
       log: conn.prepare('SELECT COUNT(*) AS c FROM checkout_log').get().c,
     }));
-    expect(counts).toEqual({ customers: 0, loans: 0, agreements: 0, log: 0 });
+    expect(counts).toEqual({ customers: 0, loans: 1, agreements: 1, log: 1 });
   });
 });
 
@@ -295,6 +295,48 @@ describe('equipment feature', () => {
     expect(result.error).toBe('Cannot sell equipment while it is checked out.');
   });
 
+  test('deleteHandler preserves loans, agreements, and checkout log history', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    checkoutAndAgree(customerId, ['AA-0001'], '2024-03-01', '2024-03-01');
+    loans.returnHandler(evt, { loanId: 1 });
+    const deleted = equipment.deleteHandler(evt, { equipmentId: 'AA-0001' });
+    expect(deleted.ok).toBe(true);
+    const counts = db.withDb((conn) => ({
+      equipment: conn.prepare('SELECT COUNT(*) AS c FROM equipment').get().c,
+      loans: conn.prepare('SELECT COUNT(*) AS c FROM loans').get().c,
+      agreements: conn.prepare('SELECT COUNT(*) AS c FROM customer_agreements').get().c,
+      log: conn.prepare('SELECT COUNT(*) AS c FROM checkout_log').get().c,
+      deletedLog: conn.prepare('SELECT COUNT(*) AS c FROM deleted_items_log').get().c,
+    }));
+    expect(counts).toEqual({ equipment: 0, loans: 1, agreements: 1, log: 1, deletedLog: 0 });
+    const loan = db.withDb((conn) => conn.prepare('SELECT * FROM loans WHERE id = 1').get());
+    expect(loan.item_name).toBe('Walker');
+    expect(loan.customer_name).toBe('Alice Smith');
+  });
+
+  test('sellHandler preserves history and analytics totals stay intact', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    checkoutAndAgree(customerId, ['AA-0001'], '2024-03-01', '2024-03-01');
+    loans.returnHandler(evt, { loanId: 1 });
+    const sold = equipment.sellHandler(evt, { equipmentId: 'AA-0001', salePrice: '25.00' });
+    expect(sold.ok).toBe(true);
+    const counts = db.withDb((conn) => ({
+      equipment: conn.prepare('SELECT COUNT(*) AS c FROM equipment').get().c,
+      loans: conn.prepare('SELECT COUNT(*) AS c FROM loans').get().c,
+      agreements: conn.prepare('SELECT COUNT(*) AS c FROM customer_agreements').get().c,
+      log: conn.prepare('SELECT COUNT(*) AS c FROM checkout_log').get().c,
+      deletedLog: conn.prepare('SELECT COUNT(*) AS c FROM deleted_items_log').get().c,
+    }));
+    expect(counts).toEqual({ equipment: 0, loans: 1, agreements: 1, log: 1, deletedLog: 1 });
+    const analytics = reports.getDataHandler(evt, { reportType: 'analytics', yearFilter: '2024' });
+    expect(analytics.analyticsSummary).toEqual({ total_checkouts: 1, unique_guests: 1, avg_per_day: 1 });
+    expect(reports.getDataHandler(evt, { reportType: 'checkout' }).reportData).toHaveLength(1);
+    const reportRow = reports.getDataHandler(evt, { reportType: 'checkout' }).reportData[0];
+    expect(reportRow.item_name).toBe('Walker');
+  });
+
   test('inlineUpdateHandler validates fields and renames equipment_id', () => {
     seedEquipment('AA-0001', 'Walker');
     expect(equipment.inlineUpdateHandler(evt, { equipmentId: 'AA-0001', field: 'price', value: '1' })).toEqual({
@@ -398,6 +440,18 @@ describe('loans feature', () => {
     loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
     const row = db.withDb((conn) => conn.prepare("SELECT date_verified FROM equipment WHERE equipment_id = 'AA-0001'").get());
     expect(row.date_verified).toBe('2024-03-01');
+  });
+
+  test('checkoutHandler snapshots item and customer details onto the loan', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
+    const row = db.withDb((conn) => conn.prepare('SELECT item_name, customer_name, customer_phone FROM loans WHERE id = 1').get());
+    expect(row).toEqual({
+      item_name: 'Walker',
+      customer_name: 'Alice Smith',
+      customer_phone: '(406) 555-1234',
+    });
   });
 
   test('inlineUpdateHandler validates dates and updates checkout and return dates', () => {

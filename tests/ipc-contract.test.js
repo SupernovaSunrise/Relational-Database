@@ -49,6 +49,7 @@ describe('ipc-contract module invariants', () => {
       CHANNELS.IMPORT_EXPORT_EXPORT_CUSTOMERS,
       CHANNELS.IMPORT_EXPORT_EXPORT_EQUIPMENT,
       CHANNELS.IMPORT_EXPORT_EXPORT_CHECKOUT_LOG,
+      CHANNELS.IMPORT_EXPORT_EXPORT_MASTER,
       CHANNELS.IMPORT_EXPORT_IMPORT_CUSTOMERS,
       CHANNELS.IMPORT_EXPORT_IMPORT_EQUIPMENT,
     ];
@@ -184,6 +185,15 @@ describe('validatePayload', () => {
     expect(ipc.validatePayload(CHANNELS.LOANS_INLINE_UPDATE, { loanId: 1, field: 'checked_out_date', value: '2024-01-01' })).toBe(true);
     expect(ipc.validatePayload(CHANNELS.EQUIPMENT_SELL, { equipmentId: 'AA-0001', salePrice: '25.00' })).toBe(true);
     expect(ipc.validatePayload(CHANNELS.EQUIPMENT_SELL, { equipmentId: 'AA-0001', salePrice: 25 })).toBe(false);
+  });
+
+  test('app:printPreview validates the html payload and caps its size', () => {
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: '<h1>Report</h1>' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: '' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, {})).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: 42 })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: 'x'.repeat(524288) })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.APP_PRINT_PREVIEW, { html: 'x'.repeat(524289) })).toBe(false);
   });
 
   test('payloads over MAX_PAYLOAD_BYTES are rejected', () => {

@@ -1,6 +1,7 @@
 const CHANNELS = Object.freeze({
   APP_GET_STATUS: 'app:getStatus',
   APP_SHUTDOWN: 'app:shutdown',
+  APP_PRINT_PREVIEW: 'app:printPreview',
 
   AUTH_REGISTER: 'auth:register',
   AUTH_LOGIN: 'auth:login',
@@ -41,6 +42,7 @@ const CHANNELS = Object.freeze({
   IMPORT_EXPORT_EXPORT_CUSTOMERS: 'importExport:exportCustomers',
   IMPORT_EXPORT_EXPORT_EQUIPMENT: 'importExport:exportEquipment',
   IMPORT_EXPORT_EXPORT_CHECKOUT_LOG: 'importExport:exportCheckoutLog',
+  IMPORT_EXPORT_EXPORT_MASTER: 'importExport:exportMaster',
   IMPORT_EXPORT_IMPORT_CUSTOMERS: 'importExport:importCustomers',
   IMPORT_EXPORT_IMPORT_EQUIPMENT: 'importExport:importEquipment',
 });
@@ -48,6 +50,7 @@ const CHANNELS = Object.freeze({
 const PAYLOADS = Object.freeze({
   [CHANNELS.APP_GET_STATUS]: {},
   [CHANNELS.APP_SHUTDOWN]: {},
+  [CHANNELS.APP_PRINT_PREVIEW]: { html: 'string:524288' },
   [CHANNELS.AUTH_REGISTER]: { username: 'string:64', password: 'string:4096' },
   [CHANNELS.AUTH_LOGIN]: { username: 'string:64', password: 'string:4096' },
   [CHANNELS.AUTH_LOGOUT]: {},
@@ -96,6 +99,7 @@ const PAYLOADS = Object.freeze({
   [CHANNELS.IMPORT_EXPORT_EXPORT_CUSTOMERS]: { format: 'string:16' },
   [CHANNELS.IMPORT_EXPORT_EXPORT_EQUIPMENT]: { format: 'string:16' },
   [CHANNELS.IMPORT_EXPORT_EXPORT_CHECKOUT_LOG]: { format: 'string:16' },
+  [CHANNELS.IMPORT_EXPORT_EXPORT_MASTER]: { format: 'string:16' },
   [CHANNELS.IMPORT_EXPORT_IMPORT_CUSTOMERS]: { path: 'string:1024' },
   [CHANNELS.IMPORT_EXPORT_IMPORT_EQUIPMENT]: { path: 'string:1024' },
 });
@@ -119,6 +123,7 @@ const REQUIRED_ADMIN = Object.freeze(new Set([
   CHANNELS.IMPORT_EXPORT_EXPORT_CUSTOMERS,
   CHANNELS.IMPORT_EXPORT_EXPORT_EQUIPMENT,
   CHANNELS.IMPORT_EXPORT_EXPORT_CHECKOUT_LOG,
+  CHANNELS.IMPORT_EXPORT_EXPORT_MASTER,
   CHANNELS.IMPORT_EXPORT_IMPORT_CUSTOMERS,
   CHANNELS.IMPORT_EXPORT_IMPORT_EQUIPMENT,
 ]));

@@ -41,6 +41,9 @@ const EXPECTED_TABLES = {
     { name: 'id', type: 'INTEGER', notnull: 0, dflt_value: null, pk: 1 },
     { name: 'customer_id', type: 'INTEGER', notnull: 1, dflt_value: null, pk: 0 },
     { name: 'equipment_id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+    { name: 'item_name', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+    { name: 'customer_name', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+    { name: 'customer_phone', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
     { name: 'checked_out_date', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
     { name: 'due_date', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
     { name: 'returned_date', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
@@ -325,6 +328,9 @@ describe('initDb on a legacy database with an old schema', () => {
         'agreement_data',
         'agreement_date',
         'agreement_pending',
+        'item_name',
+        'customer_name',
+        'customer_phone',
       ]);
       expect(tableColumnNames(conn, 'equipment')).toEqual(['equipment_id', 'item_name', 'date_verified']);
       expect(tableColumnNames(conn, 'checkout_log')).toEqual([
@@ -353,6 +359,9 @@ describe('initDb on a legacy database with an old schema', () => {
       const loan = conn.prepare('SELECT * FROM loans WHERE id = 1').get();
       expect(loan.customer_id).toBe(1);
       expect(loan.equipment_id).toBe('AA-0001');
+      expect(loan.item_name).toBe('Walker');
+      expect(loan.customer_name).toBe('Legacy Customer');
+      expect(loan.customer_phone).toBe('(406) 555-1234');
       expect(loan.checked_out_date).toBe('2024-01-01');
       expect(loan.due_date).toBe('2024-05-01');
       expect(loan.agreement_pending).toBe(0);

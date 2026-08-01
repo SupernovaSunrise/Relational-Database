@@ -271,7 +271,8 @@
     });
 
     container.querySelector('#report-print-btn').addEventListener('click', function () {
-      window.print();
+      var results = container.querySelector('#report-results');
+      App.printHtml(results ? results.innerHTML : '');
     });
 
     container.addEventListener('click', onContainerClick);

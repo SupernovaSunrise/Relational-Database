@@ -49,22 +49,23 @@ function checkoutHandler(event, payload) {
     return { ok: false, error: 'Please select at least one piece of equipment.' };
   }
   return db.withDb((conn) => {
-    const customer = conn.prepare('SELECT id FROM customers WHERE id = ?').get(customerId);
+    const customer = conn.prepare('SELECT id, name, phone FROM customers WHERE id = ?').get(customerId);
     if (!customer) {
       return { ok: false, error: 'Customer not found. Use an existing ID, name, phone, or ZIP.' };
     }
     const checkedOutDate = normalizeDateInput(checkoutDate || '') || todayIso();
     const dueDate = calculateDueDate(checkedOutDate) || todayIso();
-    const getEquipment = conn.prepare('SELECT equipment_id FROM equipment WHERE equipment_id = ?');
+    const getEquipment = conn.prepare('SELECT equipment_id, item_name FROM equipment WHERE equipment_id = ?');
     const getActiveLoan = conn.prepare('SELECT id FROM loans WHERE equipment_id = ? AND returned_date IS NULL');
     const insertLoan = conn.prepare(
-      'INSERT INTO loans (customer_id, equipment_id, checked_out_date, due_date, agreement_data, agreement_date, agreement_pending) VALUES (?, ?, ?, ?, ?, ?, 1)'
+      'INSERT INTO loans (customer_id, equipment_id, item_name, customer_name, customer_phone, checked_out_date, due_date, agreement_data, agreement_date, agreement_pending) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
     );
     conn.exec('BEGIN');
     try {
       const loanIds = [];
       for (const equipmentId of ids) {
-        if (!getEquipment.get(equipmentId)) {
+        const equipment = getEquipment.get(equipmentId);
+        if (!equipment) {
           conn.exec('ROLLBACK');
           return { ok: false, error: `Equipment ${equipmentId} does not exist.` };
         }
@@ -72,7 +73,17 @@ function checkoutHandler(event, payload) {
           conn.exec('ROLLBACK');
           return { ok: false, error: `Equipment ${equipmentId} is already checked out.` };
         }
-        const result = insertLoan.run(customerId, equipmentId, checkedOutDate, dueDate, null, null);
+        const result = insertLoan.run(
+          customerId,
+          equipmentId,
+          equipment.item_name || equipmentId,
+          customer.name,
+          customer.phone,
+          checkedOutDate,
+          dueDate,
+          null,
+          null
+        );
         loanIds.push(Number(result.lastInsertRowid));
         conn.prepare('UPDATE equipment SET date_verified = ? WHERE equipment_id = ?').run(checkedOutDate, equipmentId);
       }
@@ -129,8 +140,8 @@ function getByCustomerHandler(event, payload) {
     if (!customer) return { ok: false, error: 'Customer not found.' };
     const rows = conn
       .prepare(
-        'SELECT loans.id, loans.equipment_id, equipment.item_name, loans.checked_out_date, ' +
-        'loans.due_date, loans.agreement_date, loans.agreement_data ' +
+        'SELECT loans.id, loans.equipment_id, COALESCE(equipment.item_name, loans.item_name) AS item_name, ' +
+        'loans.checked_out_date, loans.due_date, loans.agreement_date, loans.agreement_data ' +
         'FROM loans LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id ' +
         'WHERE loans.customer_id = ? AND loans.returned_date IS NULL AND loans.agreement_data IS NOT NULL ' +
         'ORDER BY loans.checked_out_date, loans.id'
@@ -146,7 +157,8 @@ function getPendingHandler(event, payload) {
     const rows = conn
       .prepare(
         'SELECT loans.id, loans.customer_id, customers.name AS customer_name, ' +
-        'loans.equipment_id, equipment.item_name, loans.checked_out_date, loans.due_date ' +
+        'loans.equipment_id, COALESCE(equipment.item_name, loans.item_name) AS item_name, ' +
+        'loans.checked_out_date, loans.due_date ' +
         'FROM loans ' +
         'LEFT JOIN customers ON loans.customer_id = customers.id ' +
         'LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id ' +

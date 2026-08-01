@@ -78,7 +78,8 @@ async function exportHandler(event, payload, kind) {
           'Agreement Date',
         ],
         query:
-          'SELECT l.equipment_id, e.item_name, c.name AS customer_name, c.phone AS customer_phone, ' +
+          'SELECT l.equipment_id, COALESCE(e.item_name, l.item_name) AS item_name, ' +
+          'COALESCE(c.name, l.customer_name) AS customer_name, COALESCE(c.phone, l.customer_phone) AS customer_phone, ' +
           'l.checked_out_date, l.due_date, l.returned_date, l.agreement_date ' +
           'FROM loans l ' +
           'LEFT JOIN equipment e ON l.equipment_id = e.equipment_id ' +
@@ -94,6 +95,43 @@ async function exportHandler(event, payload, kind) {
           row.returned_date,
           row.agreement_date,
         ],
+      },
+      master: {
+        fileName: format === 'csv' ? 'equipment_list_export.csv' : 'equipment_list_export.xlsx',
+        title: 'Export Home Equipment List',
+        sheetName: 'Equipment List',
+        headers: [
+          'Equipment ID',
+          'Item Name',
+          'Customer Name',
+          'Customer Phone',
+          'Date Checked Out',
+          'Return Date',
+          'Status',
+        ],
+        query:
+          'SELECT equipment.equipment_id, equipment.item_name, customers.name AS customer_name, ' +
+          'customers.phone AS customer_phone, loans.checked_out_date, loans.due_date, loans.id AS loan_id ' +
+          'FROM equipment ' +
+          'LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL AND loans.agreement_pending = 0 ' +
+          'LEFT JOIN customers ON loans.customer_id = customers.id ' +
+          'ORDER BY equipment.equipment_id ASC',
+        map: (row) => {
+          const status = row.loan_id
+            ? row.due_date && row.due_date < todayIso()
+              ? 'Overdue'
+              : 'Checked Out'
+            : 'Available';
+          return [
+            row.equipment_id,
+            row.item_name,
+            row.customer_name,
+            row.customer_phone,
+            row.checked_out_date,
+            row.due_date,
+            status,
+          ];
+        },
       },
     };
     const spec = defaults[kind];
@@ -209,6 +247,10 @@ function exportCheckoutLogHandler(event, payload) {
   return exportHandler(event, payload, 'checkout_log');
 }
 
+function exportMasterHandler(event, payload) {
+  return exportHandler(event, payload, 'master');
+}
+
 function importCustomersHandler(event, payload) {
   return importHandler(event, 'customers');
 }
@@ -221,6 +263,7 @@ module.exports = {
   exportCustomersHandler,
   exportEquipmentHandler,
   exportCheckoutLogHandler,
+  exportMasterHandler,
   importCustomersHandler,
   importEquipmentHandler,
 };

@@ -38,13 +38,17 @@
       var status = item.loan_id
         ? 'Checked out to ' + esc(item.customer_name || '') + ' until ' + esc(item.due_date || '')
         : 'Available';
-      var actions = isAdmin
-        ? '<button type="button" class="btn btn-danger" data-action="delete-equipment" data-equipment-id="' + esc(item.equipment_id) + '">Delete</button>'
-        : '';
+      var actions = '';
+      if (isAdmin) {
+        if (!item.loan_id) {
+          actions += '<button type="button" class="btn" data-action="sell-equipment" data-equipment-id="' + esc(item.equipment_id) + '">Sold</button> ';
+        }
+        actions += '<button type="button" class="btn btn-danger" data-action="delete-equipment" data-equipment-id="' + esc(item.equipment_id) + '">Delete</button>';
+      }
       return '<tr class="equipment-row" data-search-text="' + esc(searchText) + '">' +
         '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="equipment_id">' + esc(item.equipment_id) + '</td>' +
         '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="item_name">' + esc(item.item_name) + '</td>' +
-        '<td>' + esc(item.date_verified || '') + '</td>' +
+        '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="date_verified">' + esc(item.date_verified || '') + '</td>' +
         '<td>' + status + '</td>' +
         '<td>' + actions + '</td>' +
       '</tr>';
@@ -65,7 +69,19 @@
     if (!btn) return;
     var action = btn.getAttribute('data-action');
 
-    if (action === 'delete-equipment') {
+    if (action === 'sell-equipment') {
+      var equipmentId = btn.getAttribute('data-equipment-id');
+      var priceInput = window.prompt('Enter sale price for ' + equipmentId + ' (e.g., 25.00):');
+      if (priceInput === null || priceInput.trim() === '') return;
+      window.dme.equipmentSell(equipmentId, priceInput.trim()).then(function (res) {
+        if (res && res.ok) {
+          App.flash(res.message || 'Equipment sold successfully.', 'success');
+        } else {
+          App.flash((res && res.error) || 'Error selling equipment.', 'error');
+        }
+        load();
+      });
+    } else if (action === 'delete-equipment') {
       var equipmentId = btn.getAttribute('data-equipment-id');
       if (!window.confirm('Delete equipment ' + equipmentId + '?')) return;
       window.dme.equipmentDelete(equipmentId).then(function (res) {

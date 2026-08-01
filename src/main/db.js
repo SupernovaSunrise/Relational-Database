@@ -144,7 +144,8 @@ function initDb(dbPath) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         equipment_id TEXT NOT NULL,
         item_name TEXT NOT NULL,
-        deletion_date TEXT NOT NULL
+        deletion_date TEXT NOT NULL,
+        sale_price TEXT
       );
     `);
     conn.exec(`
@@ -178,6 +179,10 @@ function initDb(dbPath) {
     const logColumns = tableColumns(conn, 'checkout_log');
     if (!logColumns.includes('is_first_item')) {
       conn.exec('ALTER TABLE checkout_log ADD COLUMN is_first_item INTEGER NOT NULL DEFAULT 0');
+    }
+    const deletedLogColumns = tableColumns(conn, 'deleted_items_log');
+    if (!deletedLogColumns.includes('sale_price')) {
+      conn.exec('ALTER TABLE deleted_items_log ADD COLUMN sale_price TEXT');
     }
     const updatePhone = conn.prepare('UPDATE customers SET phone = ? WHERE id = ?');
     for (const row of conn.prepare('SELECT id, phone FROM customers').all()) {

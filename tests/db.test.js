@@ -70,6 +70,7 @@ const EXPECTED_TABLES = {
     { name: 'equipment_id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
     { name: 'item_name', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
     { name: 'deletion_date', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+    { name: 'sale_price', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
   ],
 };
 
@@ -333,6 +334,13 @@ describe('initDb on a legacy database with an old schema', () => {
         'equipment_id',
         'checkout_date',
         'is_first_item',
+      ]);
+      expect(tableColumnNames(conn, 'deleted_items_log')).toEqual([
+        'id',
+        'equipment_id',
+        'item_name',
+        'deletion_date',
+        'sale_price',
       ]);
       expect(indexNames(conn)).toEqual(EXPECTED_INDEXES);
 

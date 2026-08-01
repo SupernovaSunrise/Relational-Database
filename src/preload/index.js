@@ -24,6 +24,7 @@ const api = {
   equipmentList: (search) => invoke('equipment:list', { search }),
   equipmentAdd: (equipmentId, itemName) => invoke('equipment:add', { equipmentId, itemName }),
   equipmentDelete: (equipmentId) => invoke('equipment:delete', { equipmentId }),
+  equipmentSell: (equipmentId, salePrice) => invoke('equipment:sell', { equipmentId, salePrice }),
   equipmentInlineUpdate: (equipmentId, field, value) => invoke('equipment:inlineUpdate', { equipmentId, field, value }),
 
   loansGetMasterData: () => invoke('loans:getMasterData'),
@@ -32,6 +33,7 @@ const api = {
   loansGetByCustomer: (customerId) => invoke('loans:getByCustomer', { customerId }),
   loansGetPending: () => invoke('loans:getPending'),
   loansCancelPending: (loanIds) => invoke('loans:cancelPending', { loanIds }),
+  loansInlineUpdate: (loanId, field, value) => invoke('loans:inlineUpdate', { loanId, field, value }),
 
   agreementsGetLoan: (loanId) => invoke('agreements:getLoan', { loanId }),
   agreementsGetCustomer: (customerId) => invoke('agreements:getCustomer', { customerId }),

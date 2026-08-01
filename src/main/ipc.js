@@ -133,6 +133,7 @@ function registerIpcHandlers() {
   registerChannel(CHANNELS.EQUIPMENT_LIST, equipment.listHandler);
   registerChannel(CHANNELS.EQUIPMENT_ADD, equipment.addHandler);
   registerChannel(CHANNELS.EQUIPMENT_DELETE, equipment.deleteHandler);
+  registerChannel(CHANNELS.EQUIPMENT_SELL, equipment.sellHandler);
   registerChannel(CHANNELS.EQUIPMENT_INLINE_UPDATE, equipment.inlineUpdateHandler);
 
   registerChannel(CHANNELS.LOANS_GET_MASTER_DATA, loans.getMasterDataHandler);
@@ -141,6 +142,7 @@ function registerIpcHandlers() {
   registerChannel(CHANNELS.LOANS_GET_BY_CUSTOMER, loans.getByCustomerHandler);
   registerChannel(CHANNELS.LOANS_GET_PENDING, loans.getPendingHandler);
   registerChannel(CHANNELS.LOANS_CANCEL_PENDING, loans.cancelPendingHandler);
+  registerChannel(CHANNELS.LOANS_INLINE_UPDATE, loans.inlineUpdateHandler);
 
   registerChannel(CHANNELS.AGREEMENTS_GET_LOAN, agreements.getLoanHandler);
   registerChannel(CHANNELS.AGREEMENTS_GET_CUSTOMER, agreements.getCustomerHandler);

@@ -241,7 +241,7 @@ describe('equipment feature', () => {
     expect(result.items[0].due_date).toBe('2024-08-21');
   });
 
-  test('deleteHandler blocks checked-out equipment and logs deleted items', () => {
+  test('deleteHandler blocks checked-out equipment and removes without logging a sale', () => {
     seedEquipment('AA-0001', 'Walker');
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
     loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
@@ -253,12 +253,46 @@ describe('equipment feature', () => {
     expect(deleted.ok).toBe(true);
     const rows = db.withDb((conn) => ({
       equipment: conn.prepare('SELECT COUNT(*) AS c FROM equipment').get().c,
+      deletedLog: conn.prepare('SELECT COUNT(*) AS c FROM deleted_items_log').get().c,
+    }));
+    expect(rows.equipment).toBe(0);
+    expect(rows.deletedLog).toBe(0);
+  });
+
+  test('sellHandler records a sale with price and removes the equipment', () => {
+    seedEquipment('AA-0001', 'Walker');
+    expect(equipment.sellHandler(evt, { equipmentId: 'AA-0001', salePrice: 'not-a-price' })).toEqual({
+      ok: false,
+      error: 'Please enter a valid sale price (e.g., 25.00).',
+    });
+    expect(equipment.sellHandler(evt, { equipmentId: 'AA-0001', salePrice: '0' })).toEqual({
+      ok: false,
+      error: 'Please enter a valid sale price (e.g., 25.00).',
+    });
+    expect(equipment.sellHandler(evt, { equipmentId: 'ZZ-9999', salePrice: '25.00' })).toEqual({
+      ok: false,
+      error: 'Equipment ZZ-9999 does not exist.',
+    });
+    const sold = equipment.sellHandler(evt, { equipmentId: 'AA-0001', salePrice: '$25.5' });
+    expect(sold.ok).toBe(true);
+    expect(sold.message).toBe('Equipment AA-0001 sold for $25.50.');
+    const rows = db.withDb((conn) => ({
+      equipment: conn.prepare('SELECT COUNT(*) AS c FROM equipment').get().c,
       deletedLog: conn.prepare('SELECT * FROM deleted_items_log').all(),
     }));
     expect(rows.equipment).toBe(0);
     expect(rows.deletedLog).toEqual([
-      { id: 1, equipment_id: 'AA-0001', item_name: 'Walker', deletion_date: todayIso() },
+      { id: 1, equipment_id: 'AA-0001', item_name: 'Walker', deletion_date: todayIso(), sale_price: '25.50' },
     ]);
+  });
+
+  test('sellHandler blocks selling checked-out equipment', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
+    const result = equipment.sellHandler(evt, { equipmentId: 'AA-0001', salePrice: '25.00' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Cannot sell equipment while it is checked out.');
   });
 
   test('inlineUpdateHandler validates fields and renames equipment_id', () => {
@@ -268,6 +302,12 @@ describe('equipment feature', () => {
       error: 'Invalid field',
     });
     expect(
+      equipment.inlineUpdateHandler(evt, { equipmentId: 'AA-0001', field: 'date_verified', value: 'not-a-date' })
+    ).toEqual({ ok: false, error: 'Date must be in YYYY-MM-DD format.' });
+    expect(
+      equipment.inlineUpdateHandler(evt, { equipmentId: 'AA-0001', field: 'date_verified', value: '03/01/2024' }).ok
+    ).toBe(true);
+    expect(
       equipment.inlineUpdateHandler(evt, { equipmentId: 'AA-0001', field: 'item_name', value: 'Heavy Walker' }).ok
     ).toBe(true);
     expect(
@@ -275,6 +315,7 @@ describe('equipment feature', () => {
     ).toBe(true);
     const row = db.withDb((conn) => conn.prepare("SELECT * FROM equipment WHERE equipment_id = 'AA-0002'").get());
     expect(row.item_name).toBe('Heavy Walker');
+    expect(row.date_verified).toBe('2024-03-01');
     expect(db.withDb((conn) => conn.prepare("SELECT COUNT(*) AS c FROM equipment WHERE equipment_id = 'AA-0001'").get().c)).toBe(0);
   });
 
@@ -349,6 +390,36 @@ describe('loans feature', () => {
     const result = loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'] });
     expect(result.checkoutDate).toBe(todayIso());
     expect(result.dueDate).toBe(calculateDueDate(todayIso()));
+  });
+
+  test('checkoutHandler sets date_verified on the equipment', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
+    const row = db.withDb((conn) => conn.prepare("SELECT date_verified FROM equipment WHERE equipment_id = 'AA-0001'").get());
+    expect(row.date_verified).toBe('2024-03-01');
+  });
+
+  test('inlineUpdateHandler validates dates and updates checkout and return dates', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
+    expect(loans.inlineUpdateHandler(evt, { loanId: 1, field: 'price', value: '1' })).toEqual({
+      ok: false,
+      error: 'Invalid field',
+    });
+    expect(
+      loans.inlineUpdateHandler(evt, { loanId: 1, field: 'checked_out_date', value: 'nonsense' })
+    ).toEqual({ ok: false, error: 'Date must be in YYYY-MM-DD format.' });
+    expect(loans.inlineUpdateHandler(evt, { loanId: 1, field: 'checked_out_date', value: '04/01/2024' }).ok).toBe(true);
+    expect(loans.inlineUpdateHandler(evt, { loanId: 1, field: 'due_date', value: '2024-09-01' }).ok).toBe(true);
+    const row = db.withDb((conn) => conn.prepare('SELECT checked_out_date, due_date FROM loans WHERE id = 1').get());
+    expect(row.checked_out_date).toBe('2024-04-01');
+    expect(row.due_date).toBe('2024-09-01');
+    expect(loans.inlineUpdateHandler(evt, { loanId: 999, field: 'due_date', value: '2024-09-01' })).toEqual({
+      ok: false,
+      error: 'Loan not found.',
+    });
   });
 
   test('getPendingHandler lists pending loans and getByCustomerHandler requires signed agreements', () => {
@@ -493,6 +564,30 @@ describe('agreements feature', () => {
     ]);
   });
 
+  test('submitHandler honors an explicit returnBy override', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    const checkout = loans.checkoutHandler(evt, {
+      customerId,
+      equipmentIds: ['AA-0001'],
+      checkoutDate: '2024-03-01',
+    });
+    const submit = agreements.submitHandler(evt, {
+      customerId,
+      loanIds: checkout.loanIds,
+      checkoutDate: '2024-03-01',
+      returnBy: '2025-01-15',
+      agreementDate: '2024-03-01',
+      waiverAgreed: true,
+      signatureAgreed: true,
+      signatureData: 'data:image/png;base64,test-signature',
+    });
+    expect(submit.ok).toBe(true);
+    const loan = db.withDb((conn) => conn.prepare('SELECT checked_out_date, due_date FROM loans WHERE id = 1').get());
+    expect(loan.checked_out_date).toBe('2024-03-01');
+    expect(loan.due_date).toBe('2025-01-15');
+  });
+
   test('submitHandler does not finalize loans that are not pending', () => {
     seedEquipment('AA-0001', 'Walker');
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
@@ -616,12 +711,12 @@ describe('reports feature', () => {
 
   test('getDataHandler item_sales report reads deleted_items_log', () => {
     loans.returnHandler(evt, { loanId: 2 });
-    equipment.deleteHandler(evt, { equipmentId: 'BB-0002' });
+    equipment.sellHandler(evt, { equipmentId: 'BB-0002', salePrice: '45.00' });
     const result = reports.getDataHandler(evt, { reportType: 'item_sales' });
     expect(result.ok).toBe(true);
     expect(result.reportTitle).toBe('Item Sales Log');
     expect(result.reportData).toEqual([
-      { id: 1, equipment_id: 'BB-0002', item_name: 'Wheelchair', deletion_date: todayIso() },
+      { id: 1, equipment_id: 'BB-0002', item_name: 'Wheelchair', deletion_date: todayIso(), sale_price: '45.00' },
     ]);
   });
 
@@ -630,7 +725,7 @@ describe('reports feature', () => {
     expect(reports.deleteCheckoutHandler(evt, { id: all.reportData[0].id }).ok).toBe(true);
     expect(reports.getDataHandler(evt, { reportType: 'checkout' }).reportData).toHaveLength(2);
     loans.returnHandler(evt, { loanId: 2 });
-    equipment.deleteHandler(evt, { equipmentId: 'BB-0002' });
+    equipment.sellHandler(evt, { equipmentId: 'BB-0002', salePrice: '45.00' });
     const sales = reports.getDataHandler(evt, { reportType: 'item_sales' });
     expect(reports.deleteItemSaleHandler(evt, { id: sales.reportData[0].id }).ok).toBe(true);
     expect(reports.getDataHandler(evt, { reportType: 'item_sales' }).reportData).toEqual([]);

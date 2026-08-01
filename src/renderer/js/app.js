@@ -45,7 +45,18 @@
     }, 8000);
   }
 
+  var currentTeardown = null;
+
   function showView(name, params) {
+    if (currentTeardown) {
+      var teardown = currentTeardown;
+      currentTeardown = null;
+      try {
+        teardown();
+      } catch (err) {
+        console.error('View teardown error:', err);
+      }
+    }
     var view = window.AppViews && window.AppViews[name];
     viewContainer.innerHTML = '';
     if (!view) {
@@ -64,7 +75,12 @@
     var raw = window.location.hash.replace(/^#\/?/, '');
     var qIndex = raw.indexOf('?');
     var path = qIndex === -1 ? raw : raw.slice(0, qIndex);
-    var params = new URLSearchParams(qIndex === -1 ? '' : raw.slice(qIndex + 1));
+    var params = {};
+    if (qIndex !== -1) {
+      new URLSearchParams(raw.slice(qIndex + 1)).forEach(function (value, key) {
+        params[key] = value;
+      });
+    }
     return { view: path, params: params };
   }
 
@@ -157,6 +173,8 @@
         promise = window.dme.equipmentInlineUpdate(rowId, field, value);
       } else if (table === 'customers') {
         promise = window.dme.customersInlineUpdate(Number(rowId), field, value);
+      } else if (table === 'loans') {
+        promise = window.dme.loansInlineUpdate(Number(rowId), field, value);
       } else {
         return;
       }
@@ -201,6 +219,7 @@
     navigate: navigate,
     logout: logout,
     initInlineEditing: initInlineEditing,
+    setTeardown: function (fn) { currentTeardown = fn; },
   };
 
   document.addEventListener('DOMContentLoaded', boot);

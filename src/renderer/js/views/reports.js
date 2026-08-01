@@ -125,7 +125,7 @@
         if (isCheckout) {
           html += '<th>Checkout Date</th><th>Equipment ID</th><th>Item Name</th><th>Customer ZIP Code</th><th class="col-actions">Actions</th>';
         } else {
-          html += '<th>Deletion Date</th><th>Equipment ID</th><th>Item Name</th><th class="col-actions">Actions</th>';
+          html += '<th>Sale Date</th><th>Equipment ID</th><th>Item Name</th><th>Price</th><th class="col-actions">Actions</th>';
         }
         html += '</tr></thead><tbody>';
         reportData.forEach(function (item) {
@@ -144,6 +144,7 @@
               '<td>' + esc(item.deletion_date) + '</td>' +
               '<td>' + esc(item.equipment_id) + '</td>' +
               '<td>' + esc(item.item_name) + '</td>' +
+              '<td>' + (item.sale_price ? '$' + esc(item.sale_price) : '') + '</td>' +
               '<td class="col-actions">' +
                 (isAdmin ? '<button type="button" class="btn btn-danger" data-action="delete-item-sale" data-id="' + item.id + '">Delete</button>' : '') +
               '</td>' +

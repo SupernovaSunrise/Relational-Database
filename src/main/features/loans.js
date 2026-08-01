@@ -74,6 +74,7 @@ function checkoutHandler(event, payload) {
         }
         const result = insertLoan.run(customerId, equipmentId, checkedOutDate, dueDate, null, null);
         loanIds.push(Number(result.lastInsertRowid));
+        conn.prepare('UPDATE equipment SET date_verified = ? WHERE equipment_id = ?').run(checkedOutDate, equipmentId);
       }
       conn.exec('COMMIT');
       return {
@@ -98,6 +99,25 @@ function returnHandler(event, payload) {
   return db.withDb((conn) => {
     conn.prepare('UPDATE loans SET returned_date = ? WHERE id = ?').run(todayIso(), payload.loanId);
     return { ok: true, message: 'Equipment returned successfully.' };
+  });
+}
+
+function inlineUpdateHandler(event, payload) {
+  const { loanId, field, value } = payload;
+  if (!['checked_out_date', 'due_date'].includes(field)) {
+    return { ok: false, error: 'Invalid field' };
+  }
+  const dateValue = normalizeDateInput(String(value).trim());
+  if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    return { ok: false, error: 'Date must be in YYYY-MM-DD format.' };
+  }
+  return db.withDb((conn) => {
+    const loan = conn.prepare('SELECT id FROM loans WHERE id = ?').get(loanId);
+    if (!loan) {
+      return { ok: false, error: 'Loan not found.' };
+    }
+    conn.prepare(`UPDATE loans SET ${field} = ? WHERE id = ?`).run(dateValue, loanId);
+    return { ok: true, success: true };
   });
 }
 
@@ -176,4 +196,5 @@ module.exports = {
   getByCustomerHandler,
   getPendingHandler,
   cancelPendingHandler,
+  inlineUpdateHandler,
 };

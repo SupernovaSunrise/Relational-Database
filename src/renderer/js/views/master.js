@@ -3,7 +3,6 @@
 
   var module = {
     rows: [],
-    pending: [],
     todayStr: '',
     search: '',
     activeTab: 'all',
@@ -26,19 +25,13 @@
   }
 
   function loadData() {
-    return Promise.all([
-      window.dme.loansGetMasterData(),
-      window.dme.loansGetPending(),
-    ]).then(function (results) {
-      var masterRes = results[0];
-      var pendingRes = results[1];
+    return window.dme.loansGetMasterData().then(function (masterRes) {
       if (!masterRes || !masterRes.ok) {
         App.flash((masterRes && masterRes.error) || 'Failed to load equipment.', 'error');
         return false;
       }
       module.rows = masterRes.rows || [];
       module.todayStr = masterRes.todayStr || App.todayIso();
-      module.pending = pendingRes && pendingRes.ok ? pendingRes.items || [] : [];
       return true;
     });
   }
@@ -72,39 +65,6 @@
             '<td>' + App.escapeHtml(c.phone || '') + '</td>' +
             '<td>' + App.escapeHtml(c.zip_code || '') + '</td>' +
             '<td><button type="button" class="btn" data-action="candidate-select" data-customer-id="' + c.id + '">Select</button></td>' +
-          '</tr>';
-        }).join('') +
-        '</tbody>' +
-      '</table>';
-  }
-
-  function renderPending() {
-    var section = module.container.querySelector('#pending-section');
-    if (!section) return;
-    if (!module.pending.length) {
-      section.hidden = true;
-      section.innerHTML = '';
-      return;
-    }
-    section.hidden = false;
-    section.innerHTML =
-      '<h2>Pending Agreements</h2>' +
-      '<p>These checkouts are awaiting a signed agreement.</p>' +
-      '<table>' +
-        '<thead><tr><th>Customer</th><th>Equipment</th><th>Checked Out</th><th>Due</th><th>Actions</th></tr></thead>' +
-        '<tbody>' +
-        module.pending.map(function (p) {
-          var label = App.escapeHtml(p.equipment_id || '');
-          if (p.item_name) label += ' — ' + App.escapeHtml(p.item_name);
-          return '<tr>' +
-            '<td>' + App.escapeHtml(p.customer_name || '') + '</td>' +
-            '<td>' + label + '</td>' +
-            '<td>' + App.escapeHtml(p.checked_out_date || '') + '</td>' +
-            '<td>' + App.escapeHtml(p.due_date || '') + '</td>' +
-            '<td>' +
-              '<button type="button" class="btn" data-action="sign-pending" data-customer-id="' + p.customer_id + '" data-loan-id="' + p.id + '" data-checkout-date="' + App.escapeHtml(p.checked_out_date || '') + '" data-due-date="' + App.escapeHtml(p.due_date || '') + '">Sign Agreement</button> ' +
-              '<button type="button" class="btn btn-danger" data-action="cancel-pending" data-loan-id="' + p.id + '">Cancel</button>' +
-            '</td>' +
           '</tr>';
         }).join('') +
         '</tbody>' +
@@ -152,6 +112,12 @@
     var customerPhoneCell = item.customer_phone
       ? '<td contenteditable="true" data-table="customers" data-row-id="' + item.customer_id + '" data-field="phone">' + esc(item.customer_phone) + '</td>'
       : '<td></td>';
+    var checkedOutCell = item.loan_id
+      ? '<td contenteditable="true" data-table="loans" data-row-id="' + item.loan_id + '" data-field="checked_out_date">' + esc(item.checked_out_date || '') + '</td>'
+      : '<td>' + esc(item.checked_out_date || '') + '</td>';
+    var dueDateCell = item.loan_id
+      ? '<td contenteditable="true" data-table="loans" data-row-id="' + item.loan_id + '" data-field="due_date">' + esc(item.due_date || '') + '</td>'
+      : '<td>' + esc(item.due_date || '') + '</td>';
 
     return '<tr class="master-row' + (status === 'overdue' ? ' overdue-row' : '') + '"' +
       ' data-status="' + status + '"' +
@@ -166,8 +132,8 @@
       '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="item_name">' + esc(item.item_name) + '</td>' +
       customerNameCell +
       customerPhoneCell +
-      '<td>' + esc(item.checked_out_date || '') + '</td>' +
-      '<td>' + esc(item.due_date || '') + '</td>' +
+      checkedOutCell +
+      dueDateCell +
       '<td>' + actionHtml + '</td>' +
       '</tr>';
   }
@@ -227,7 +193,6 @@
   function render() {
     if (!module.container) return;
     renderCandidates();
-    renderPending();
     renderTabs();
     renderTable();
     applySort();
@@ -298,13 +263,6 @@
     });
   }
 
-  function cancelPending(loanId) {
-    window.dme.loansCancelPending([Number(loanId)]).then(function (res) {
-      App.flash((res && (res.message || (res.ok ? 'Checkout cancelled and pending items removed.' : res.error))) || 'Failed to cancel pending checkout.', res && res.ok ? 'success' : 'error');
-      loadAndRender();
-    });
-  }
-
   function onContainerClick(e) {
     var tab = e.target.closest ? e.target.closest('.tab-btn') : null;
     if (tab) {
@@ -326,16 +284,6 @@
       App.navigate('agreement', { mode: 'view', customerId: btn.getAttribute('data-customer-id') });
     } else if (action === 'candidate-select') {
       doCheckout(Number(btn.getAttribute('data-customer-id')), module.pendingEquipmentIds);
-    } else if (action === 'sign-pending') {
-      App.navigate('agreement', {
-        mode: 'sign',
-        customerId: btn.getAttribute('data-customer-id'),
-        loanIds: btn.getAttribute('data-loan-id'),
-        checkoutDate: btn.getAttribute('data-checkout-date') || '',
-        dueDate: btn.getAttribute('data-due-date') || '',
-      });
-    } else if (action === 'cancel-pending') {
-      cancelPending(btn.getAttribute('data-loan-id'));
     }
   }
 
@@ -420,7 +368,6 @@
       '</section>' +
 
       '<section class="candidate-section" id="candidate-section" hidden></section>' +
-      '<section class="control-section" id="pending-section" hidden></section>' +
 
       '<div class="form-grid">' +
         '<section class="control-section">' +

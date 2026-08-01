@@ -5,6 +5,19 @@
     '<p>The terms and conditions described below are a contractual agreement between you and the NW MT Veterans Stand Down and Food Pantry DME Loan Program. I understand and agree that the agreement unless special arrangements are made prior to such date. I accept responsibility for equipment loaned to me. I understand that the use of any equipment is at the recipient\'s own risk. In no event will NW Montana Veterans Stand Down and Food Pantry, be liable to any direct, indirect, or other consequential damages, or injuries from the use of the DME Loan Program. I understand that I am completely responsible for the proper and safe use of all equipment loaned to me by the DME Loan Program.</p>' +
     '<p>I understand that if I am an Occupational Therapist/Physical Therapist, I am also responsible for the equipment out on loan. In either getting the equipment returned or paid for by the due date.</p>';
 
+  var activePendingCancel = null;
+  var activeFinalized = false;
+
+  function cancelActivePending() {
+    if (!activeFinalized && activePendingCancel) {
+      var ids = activePendingCancel;
+      activePendingCancel = null;
+      window.dme.loansCancelPending(ids);
+    }
+  }
+
+  window.addEventListener('pagehide', cancelActivePending);
+
   function isoFromDate(date) {
     var y = date.getFullYear();
     var m = String(date.getMonth() + 1).padStart(2, '0');
@@ -104,6 +117,9 @@
       App.navigate('master');
       return;
     }
+    activePendingCancel = loanIds;
+    activeFinalized = false;
+    App.setTeardown(cancelActivePending);
 
     container.innerHTML =
       '<h2>Customer Agreement</h2>' +
@@ -130,7 +146,7 @@
         '<p><strong>Customer:</strong> ' + esc(customer.name) + (customer.phone ? ' (' + esc(customer.phone) + ')' : '') + '</p>' +
         '<p><strong>Zip:</strong> ' + esc(customer.zip_code || '') + '</p>' +
         '<p class="no-print"><strong>Checkout Date:</strong> <input class="customer-info-field" type="text" id="checkout_date" value="' + esc(params.checkoutDate || first.checkoutDate || App.todayIso()) + '" placeholder="YYYY-MM-DD" autocomplete="off"></p>' +
-        '<p><strong>Return By:</strong> <span id="return_by_display">' + esc(params.dueDate || first.dueDate || '') + ' (' + checkoutPeriodDays + ' days)</span></p>' +
+        '<p><strong>Return By:</strong> <input class="customer-info-field" type="text" id="return_by" value="' + esc(params.dueDate || first.dueDate || '') + '" placeholder="YYYY-MM-DD" autocomplete="off"> <span id="return_by_hint">(' + checkoutPeriodDays + ' days)</span></p>' +
         '<p><strong>Equipment:</strong></p>' +
         '<ul>' + items.map(function (item) {
           return '<li>' + esc(item.equipment_id) + (item.item_name ? ' — ' + esc(item.item_name) : '') + '</li>';
@@ -163,31 +179,37 @@
       var canvas = cardBody.querySelector('#sigCanvas');
       var pad = initSignaturePad(canvas);
       var checkoutInput = cardBody.querySelector('#checkout_date');
-      var returnByDisplay = cardBody.querySelector('#return_by_display');
+      var returnByInput = cardBody.querySelector('#return_by');
+      var returnByHint = cardBody.querySelector('#return_by_hint');
 
       function updateReturnByDate() {
-        if (!checkoutInput || !returnByDisplay) return;
+        if (!checkoutInput || !returnByInput) return;
         var raw = checkoutInput.value.trim();
         if (!raw) {
-          returnByDisplay.textContent = '';
+          returnByInput.value = '';
+          if (returnByHint) returnByHint.textContent = '';
           return;
         }
         var normalized = formatDateInput(checkoutInput);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-          returnByDisplay.textContent = '';
+          if (returnByHint) returnByHint.textContent = '';
           return;
         }
         var date = new Date(normalized + 'T00:00:00');
         if (isNaN(date.getTime())) {
-          returnByDisplay.textContent = '';
+          if (returnByHint) returnByHint.textContent = '';
           return;
         }
         date.setDate(date.getDate() + checkoutPeriodDays);
-        returnByDisplay.textContent = isoFromDate(date) + ' (' + checkoutPeriodDays + ' days)';
+        returnByInput.value = isoFromDate(date);
+        if (returnByHint) returnByHint.textContent = '(' + checkoutPeriodDays + ' days)';
       }
 
       checkoutInput.addEventListener('input', updateReturnByDate);
       checkoutInput.addEventListener('blur', updateReturnByDate);
+      returnByInput.addEventListener('blur', function () {
+        formatDateInput(returnByInput);
+      });
       updateReturnByDate();
 
       cardBody.querySelector('#sig-clear-btn').addEventListener('click', function () {
@@ -199,6 +221,7 @@
       });
 
       cardBody.querySelector('#agreement-cancel-btn').addEventListener('click', function () {
+        activePendingCancel = null;
         window.dme.loansCancelPending(loanIds).then(function (res) {
           App.flash((res && (res.message || (res.ok ? 'Checkout cancelled and pending items removed.' : res.error))) || 'Failed to cancel checkout.', res && res.ok ? 'success' : 'error');
           App.navigate('master');
@@ -218,10 +241,16 @@
           return;
         }
         var checkoutDate = formatDateInput(checkoutInput) || App.todayIso();
+        var returnBy = formatDateInput(returnByInput);
+        if (!returnBy || !/^\d{4}-\d{2}-\d{2}$/.test(returnBy)) {
+          App.flash('Return date must be a valid date in YYYY-MM-DD format.', 'error');
+          return;
+        }
         var payload = {
           customerId: customerId,
           loanIds: loanIds,
           checkoutDate: checkoutDate,
+          returnBy: returnBy,
           agreementDate: App.todayIso(),
           waiverAgreed: waiverAgreed,
           signatureAgreed: signatureAgreed,
@@ -229,6 +258,8 @@
         };
         window.dme.agreementsSubmit(payload).then(function (res) {
           if (res && res.ok) {
+            activeFinalized = true;
+            activePendingCancel = null;
             App.flash(res.message || 'Customer agreement recorded successfully.', 'success');
             App.navigate('master');
           } else {
@@ -246,6 +277,8 @@
       App.navigate('master');
       return;
     }
+    activePendingCancel = null;
+    activeFinalized = true;
 
     container.innerHTML =
       '<h2>Signed Customer Agreement</h2>' +

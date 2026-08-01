@@ -79,6 +79,10 @@ function submitHandler(event, payload) {
   const checkoutDate = normalizeDateInput(payload.checkoutDate) || todayIso();
   let dueDate = calculateDueDate(checkoutDate);
   if (!dueDate) dueDate = todayIso();
+  const returnBy = normalizeDateInput(payload.returnBy || '');
+  if (returnBy && /^\d{4}-\d{2}-\d{2}$/.test(returnBy)) {
+    dueDate = returnBy;
+  }
   const agreementDate = normalizeDateInput(payload.agreementDate) || todayIso();
   const loanIds = payload.loanIds;
   return db.withDb((conn) => {

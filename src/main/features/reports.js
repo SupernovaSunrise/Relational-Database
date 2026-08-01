@@ -44,7 +44,7 @@ function getDataHandler(event, payload) {
       reportData = conn.prepare(query).all(...params).map((row) => ({ ...row }));
       reportTitle = 'Checkout Log';
     } else if (reportType === 'item_sales') {
-      let query = 'SELECT id, equipment_id, item_name, deletion_date FROM deleted_items_log WHERE 1=1';
+      let query = 'SELECT id, equipment_id, item_name, deletion_date, sale_price FROM deleted_items_log WHERE 1=1';
       const params = [];
       if (yearFilter) {
         query += " AND strftime('%Y', deletion_date) = ?";

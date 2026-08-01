@@ -43,6 +43,7 @@ describe('ipc-contract module invariants', () => {
       CHANNELS.APP_SHUTDOWN,
       CHANNELS.CUSTOMERS_DELETE,
       CHANNELS.EQUIPMENT_DELETE,
+      CHANNELS.EQUIPMENT_SELL,
       CHANNELS.REPORTS_DELETE_CHECKOUT,
       CHANNELS.REPORTS_DELETE_ITEM_SALE,
       CHANNELS.IMPORT_EXPORT_EXPORT_CUSTOMERS,
@@ -167,11 +168,22 @@ describe('validatePayload', () => {
     };
     expect(ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, base)).toBe(true);
     expect(
+      ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, returnBy: '2024-05-01' })
+    ).toBe(true);
+    expect(
       ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, waiverAgreed: 1 })
     ).toBe(false);
     expect(
       ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, signatureAgreed: 'true' })
     ).toBe(false);
+  });
+
+  test('loans:inlineUpdate and equipment:sell validate their payloads', () => {
+    expect(ipc.validatePayload(CHANNELS.LOANS_INLINE_UPDATE, { loanId: 1, field: 'due_date', value: '2024-05-01' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.LOANS_INLINE_UPDATE, { loanId: 1.5, field: 'due_date', value: '2024-05-01' })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.LOANS_INLINE_UPDATE, { loanId: 1, field: 'checked_out_date', value: '2024-01-01' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.EQUIPMENT_SELL, { equipmentId: 'AA-0001', salePrice: '25.00' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.EQUIPMENT_SELL, { equipmentId: 'AA-0001', salePrice: 25 })).toBe(false);
   });
 
   test('payloads over MAX_PAYLOAD_BYTES are rejected', () => {

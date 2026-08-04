@@ -228,8 +228,10 @@
           '<label for="report-date-to"><strong>To:</strong></label>' +
           '<input type="date" id="report-date-to">' +
         '</div>' +
-        '<button type="button" class="btn" id="report-filter-btn">Filter</button>' +
-        '<button type="button" class="btn print-button" id="report-print-btn">Print Report</button>' +
+        '<div class="report-filter-actions">' +
+          '<button type="button" class="btn" id="report-filter-btn">Filter</button>' +
+          '<button type="button" class="btn print-button" id="report-print-btn">Print Report</button>' +
+        '</div>' +
       '</div>' +
       '<div id="report-results"></div>';
 

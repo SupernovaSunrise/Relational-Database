@@ -351,24 +351,6 @@
       '<h1>Veteran\'s DME</h1>' +
       '<p>Manage customers, equipment, checkouts, and returns from one central page.</p>' +
 
-      '<section class="control-section">' +
-        '<h2>Checkout</h2>' +
-        '<div class="checkout-bar">' +
-          '<div class="form-group">' +
-            '<label for="checkout-customer">Customer (ID, name, phone, or ZIP)</label>' +
-            '<input type="text" id="checkout-customer" placeholder="Customer ID, Name, Phone, or ZIP" autocomplete="off">' +
-          '</div>' +
-          '<div class="form-group form-group-date">' +
-            '<label for="checkout-date">Checkout Date</label>' +
-            '<input type="date" id="checkout-date" value="' + App.todayIso() + '">' +
-          '</div>' +
-          '<button type="button" class="btn" id="checkout-btn">Checkout Selected</button>' +
-        '</div>' +
-        '<p class="hint">Select one or more available items below, then choose a customer and check them out.</p>' +
-      '</section>' +
-
-      '<section class="candidate-section" id="candidate-section" hidden></section>' +
-
       '<div class="form-grid">' +
         '<section class="control-section">' +
           '<h2>Add Customer</h2>' +
@@ -403,6 +385,24 @@
           '</form>' +
         '</section>' +
       '</div>' +
+
+      '<section class="control-section">' +
+        '<h2>Checkout</h2>' +
+        '<div class="checkout-bar">' +
+          '<div class="form-group">' +
+            '<label for="checkout-customer">Customer (ID, name, phone, or ZIP)</label>' +
+            '<input type="text" id="checkout-customer" placeholder="Customer ID, Name, Phone, or ZIP" autocomplete="off">' +
+          '</div>' +
+          '<div class="form-group form-group-date">' +
+            '<label for="checkout-date">Checkout Date</label>' +
+            '<input type="date" id="checkout-date" value="' + App.todayIso() + '">' +
+          '</div>' +
+          '<button type="button" class="btn" id="checkout-btn">Checkout Selected</button>' +
+        '</div>' +
+        '<p class="hint">Select one or more available items below, then choose a customer and check them out.</p>' +
+      '</section>' +
+
+      '<section class="candidate-section" id="candidate-section" hidden></section>' +
 
       '<div class="filter-row">' +
         '<div class="form-group">' +

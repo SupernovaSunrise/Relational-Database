@@ -389,8 +389,14 @@ tr.overdue-row td:first-child {
   min-width: 150px;
 }
 
+.report-filter-actions {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
 .print-button {
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .month-filter-row {

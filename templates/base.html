@@ -38,6 +38,12 @@
         nav a:hover {
             background-color: #0056b3;
         }
+        nav a.nav-danger {
+            background-color: #dc3545;
+        }
+        nav a.nav-danger:hover {
+            background-color: #c82333;
+        }
         .btn {
             background-color: #007bff;
             color: white;
@@ -147,8 +153,6 @@
         {% if current_user.is_authenticated %}
         <span style="float: right; color: white; line-height: 30px; margin-right: 10px;">
             {{ current_user.username }}
-            <a href="{{ url_for('change_password') }}" style="margin-left: 10px;">Change Password</a>
-            <a href="{{ url_for('logout') }}" style="margin-left: 10px;">Logout</a>
         </span>
         {% else %}
         <span style="float: right; line-height: 30px; margin-right: 10px;">

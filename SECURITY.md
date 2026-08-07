@@ -9,55 +9,71 @@ If you discover a security vulnerability, please report it responsibly:
 3. Include steps to reproduce the issue
 4. Allow reasonable time for a fix before public disclosure
 
-## Security Measures
-
-### Authentication & Authorization
-- Flask-Login session-based authentication
-- Passwords hashed with werkzeug.security (pbkdf2:sha256)
-- Admin account required for all data access
-- First-run registration flow for initial setup
-
-### Data Protection
-- All SQL queries use parameterized statements (no SQL injection)
-- CSRF tokens on all forms (Flask-WTF)
-- Customer PII encrypted at rest when using TLS
-- Database file excluded from version control (.gitignore)
-
-### Web Security Headers
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `X-XSS-Protection: 1; mode=block`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `Content-Security-Policy` restricting resource loading
-
-### Input Validation
-- Phone numbers: minimum 10 digits
-- Zip codes: exactly 5 digits
-- Equipment IDs: regex pattern `^[A-Z]{2}-\d{4}$`
-- Upload file size limit: 16 MB
-- LIKE wildcard characters escaped in search queries
-
-### Transport Security
-- TLS/HTTPS support via `SSL_CERTFILE` and `SSL_KEYFILE` environment variables
-- Self-signed certificate generation script included (`generate_cert.bat`)
-- For production, use a reverse proxy (nginx) with proper SSL certificates
-
-### Error Handling
-- Server-side exception logging (no details exposed to users)
-- Generic error messages shown to end users
-- Flask debug mode disabled by default
-
 ## Supported Versions
 
 | Version | Supported |
 |---------|-----------|
 | Latest  | Yes       |
 
+## Threat Model
+
+Mendure DME is a local, single-machine Electron application. There is no server, no
+network listener, and no web-accessible surface. The app is never exposed to the
+internet; a compromise requires local access to the machine or a malicious file
+tricked into running on it.
+
+## Security Measures
+
+### Renderer Isolation
+- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `webSecurity: true`
+- Strict CSP meta tag: no inline scripts or styles, no `eval`, `connect-src 'none'`
+- `setWindowOpenHandler` denies all new windows; `will-navigate` blocks navigation away from the app
+- devTools disabled when packaged
+
+### IPC Bridge
+- The renderer reaches main only through a `contextBridge` allowlist API (`window.dme.*`)
+- Every channel is gated in order: trusted sender (single known webContents id) → strict payload
+  validation (key allowlist, type + length caps, 1 MB total) → session → admin (for deletes,
+  import/export, shutdown)
+- Payload validation is fail-closed: unknown keys, wrong types, and over-length values are rejected
+- Feature handlers never re-validate types but re-check business rules
+
+### Authentication & Authorization
+- Password hashing compatible with legacy werkzeug hashes: verifies `pbkdf2:sha256:<iter>`
+  and `scrypt:n:r:p`; new hashes use `pbkdf2:sha256:600000`
+- Session held only in main-process memory; never exposed to the renderer
+- First registered user becomes admin
+- Brute-force protection: 5 failed logins per 300 s keyed by webContents id
+
+### Data Protection
+- All SQL queries use parameterized statements (no SQL injection)
+- SQLite at `app.getPath('userData')/database.db`, WAL mode, single-writer
+- Database is unencrypted at rest (same exposure class as the legacy Flask app) — do not
+  rely on the app for protection of data at rest; use OS disk encryption
+- Database and WAL sidecars are gitignored and must never be committed
+- First-run migration copies a legacy `database.db` (including `-wal`/`-shm` sidecars so no
+  rows are lost) into userData and never overwrites an existing target
+
+### Input Validation
+- Phone numbers: minimum 10 digits, normalized to `(XXX) XXX-XXXX`
+- Zip codes: exactly 5 digits
+- Equipment IDs: regex pattern `^[A-Z]{2}-\d{4}$`
+- LIKE wildcard characters escaped in search queries
+- All user data is HTML-escaped before DOM injection (XSS containment)
+
+### Print / Temp Files
+- Print documents are generated in per-run temp directories with `script-src 'none'`
+- Temp HTML/PDF files are removed on failure and shortly after successful open
+
+### Error Handling
+- Main-process exception logging; generic `internal error` returned across the bridge
+- Handlers return `{ ok: false, error: ... }` and never leak stack traces
+
 ## Best Practices for Deployment
 
-1. Set `FLASK_SECRET_KEY` to a strong random value
-2. Enable TLS for any network-accessible deployment
-3. Use a reverse proxy (nginx/Apache) for production
-4. Regularly backup `database.db`
-5. Keep Python and dependencies updated
-6. Do not run as root/administrator
+1. Run the app from an account with least privilege (do not run as Administrator)
+2. Enable OS disk encryption (BitLocker) to protect PHI/PII at rest
+3. Back up `%APPDATA%\Mendure DME\database.db` (app closed) on a schedule
+4. Only install builds published from the official repository / GitHub Releases
+5. Prefer code-signed builds to avoid SmartScreen warnings and unsigned-artifact risks
+6. Keep the app updated by installing new releases

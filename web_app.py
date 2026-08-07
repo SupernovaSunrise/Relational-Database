@@ -2,7 +2,9 @@ import os
 import sys
 import argparse
 import logging
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+import webbrowser
+import threading
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import *
@@ -10,6 +12,7 @@ import sqlite3
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 try:
     from openpyxl import Workbook, load_workbook
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -38,6 +41,7 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(24).hex()
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 try:
     from flask_wtf.csrf import CSRFProtect
     csrf = CSRFProtect(app)
@@ -53,6 +57,10 @@ login_manager.login_message_category = 'error'
 SEARCH_RATE_LIMIT = 20
 SEARCH_RATE_PERIOD = 10
 search_request_log = {}
+
+LOGIN_FAILED_LIMIT = 5
+LOGIN_FAILED_PERIOD = 300
+login_failed_log = {}
 SEARCH_API_KEY = os.environ.get('EQUIPMENT_SEARCH_API_KEY')
 
 
@@ -73,6 +81,23 @@ def load_user(user_id):
     if row:
         return User(row['id'], row['username'], row['is_admin'])
     return None
+
+
+@app.context_processor
+def inject_is_frozen():
+    return dict(is_frozen=getattr(sys, 'frozen', False))
+
+
+@app.route('/shutdown')
+@login_required
+def shutdown():
+    if not getattr(sys, 'frozen', False):
+        return "Shutdown is only available in the standalone application.", 403
+    if not current_user.is_admin:
+        abort(403)
+    log.info("Shutdown requested via /shutdown route")
+    threading.Thread(target=lambda: os._exit(0), daemon=True).start()
+    return "Shutting down..."
 
 
 @app.before_request
@@ -109,6 +134,14 @@ def login():
     conn.close()
     if row['cnt'] == 0:
         return redirect(url_for('register'))
+
+    client_ip = request.remote_addr or 'unknown'
+    now = datetime.now().timestamp()
+    recent_fails = [t for t in login_failed_log.get(client_ip, []) if now - t < LOGIN_FAILED_PERIOD]
+    if len(recent_fails) >= LOGIN_FAILED_LIMIT:
+        flash('Too many failed login attempts. Please wait a few minutes and try again.')
+        return render_template('login.html')
+
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
@@ -118,16 +151,29 @@ def login():
         user_row = cursor.fetchone()
         conn.close()
         if user_row and check_password_hash(user_row['password_hash'], password):
+            login_failed_log.pop(client_ip, None)
             user = User(user_row['id'], user_row['username'], user_row['is_admin'])
             login_user(user)
             flash('Logged in successfully.')
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('master_control'))
+            next_page = request.args.get('next', '')
+            normalized_next = next_page.replace('\\', '')
+            parsed_next = urlparse(normalized_next)
+            if (
+                normalized_next.startswith('/')
+                and not normalized_next.startswith('//')
+                and not parsed_next.scheme
+                and not parsed_next.netloc
+            ):
+                return redirect(normalized_next)
+            return redirect(url_for('master_control'))
+        if client_ip not in login_failed_log:
+            login_failed_log[client_ip] = []
+        login_failed_log[client_ip].append(now)
         flash('Invalid username or password.')
     return render_template('login.html')
 
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 @login_required
 def logout():
     logout_user()
@@ -180,41 +226,6 @@ def register():
         flash('Account created successfully. Please log in.')
         return redirect(url_for('login'))
     return render_template('register.html')
-
-
-@app.route('/change_password', methods=['GET', 'POST'])
-@login_required
-def change_password():
-    if request.method == 'POST':
-        current_password = request.form.get('current_password', '')
-        new_password = request.form.get('new_password', '')
-        confirm = request.form.get('confirm_password', '')
-        if not current_password or not new_password:
-            flash('All fields are required.')
-            return redirect(url_for('change_password'))
-        if new_password != confirm:
-            flash('New passwords do not match.')
-            return redirect(url_for('change_password'))
-        if len(new_password) < 8:
-            flash('New password must be at least 8 characters.')
-            return redirect(url_for('change_password'))
-        conn = connect_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT password_hash FROM users WHERE id = ?", (current_user.id,))
-        row = cursor.fetchone()
-        if not row or not check_password_hash(row['password_hash'], current_password):
-            conn.close()
-            flash('Current password is incorrect.')
-            return redirect(url_for('change_password'))
-        cursor.execute(
-            "UPDATE users SET password_hash = ? WHERE id = ?",
-            (generate_password_hash(new_password), current_user.id),
-        )
-        conn.commit()
-        conn.close()
-        flash('Password changed successfully.')
-        return redirect(url_for('master_control'))
-    return render_template('change_password.html')
 
 
 @app.route('/')
@@ -629,6 +640,8 @@ def add_equipment():
 @app.route('/delete_customer/<int:customer_id>', methods=['POST'])
 @login_required
 def delete_customer(customer_id):
+    if not current_user.is_admin:
+        abort(403)
     search = request.form.get('search', '').strip()
     conn = connect_db()
     cursor = conn.cursor()
@@ -657,6 +670,8 @@ def delete_customer(customer_id):
 @app.route('/delete_equipment/<equipment_id>', methods=['POST'])
 @login_required
 def delete_equipment(equipment_id):
+    if not current_user.is_admin:
+        abort(403)
     search = request.form.get('search', '').strip()
     conn = connect_db()
     cursor = conn.cursor()
@@ -696,6 +711,54 @@ def delete_equipment(equipment_id):
 def settings():
     if request.method == 'POST':
         action = request.form.get('action')
+
+        if action == 'change_password':
+            current_password = request.form.get('current_password', '')
+            new_password = request.form.get('new_password', '')
+            confirm = request.form.get('confirm_password', '')
+            if not current_password or not new_password:
+                flash('All fields are required.')
+                return redirect(url_for('settings'))
+            if new_password != confirm:
+                flash('New passwords do not match.')
+                return redirect(url_for('settings'))
+            if len(new_password) < 8:
+                flash('New password must be at least 8 characters.')
+                return redirect(url_for('settings'))
+            conn = connect_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT password_hash FROM users WHERE id = ?", (current_user.id,))
+            row = cursor.fetchone()
+            if not row or not check_password_hash(row['password_hash'], current_password):
+                conn.close()
+                flash('Current password is incorrect.')
+                return redirect(url_for('settings'))
+            cursor.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (generate_password_hash(new_password), current_user.id),
+            )
+            conn.commit()
+            conn.close()
+            flash('Password changed successfully.')
+            return redirect(url_for('settings'))
+
+        if action == 'logout':
+            logout_user()
+            flash('You have been logged out.')
+            return redirect(url_for('login'))
+
+        if action == 'shutdown':
+            if not getattr(sys, 'frozen', False):
+                return "Shutdown is only available in the standalone application.", 403
+            if not current_user.is_admin:
+                abort(403)
+            log.info("Shutdown requested via settings")
+            threading.Thread(target=lambda: os._exit(0), daemon=True).start()
+            return "Shutting down..."
+
+        if action in ('import_customers', 'import_equipment', 'export'):
+            if not current_user.is_admin:
+                abort(403)
 
         if action == 'import_customers':
             if 'file' not in request.files:
@@ -881,6 +944,50 @@ def settings():
                         writer.writerow([row['equipment_id'], row['item_name']])
                     output.seek(0)
                     return send_file(output, mimetype='text/csv', as_attachment=True, download_name='equipment_export.csv')
+
+            elif export_type == 'checkout_log':
+                cursor.execute("""
+                    SELECT
+                        l.equipment_id,
+                        e.item_name,
+                        c.name AS customer_name,
+                        c.phone AS customer_phone,
+                        l.checked_out_date,
+                        l.due_date,
+                        l.returned_date,
+                        l.agreement_date
+                    FROM loans l
+                    LEFT JOIN equipment e ON l.equipment_id = e.equipment_id
+                    LEFT JOIN customers c ON l.customer_id = c.id
+                    ORDER BY l.checked_out_date DESC
+                """)
+                rows = cursor.fetchall()
+                conn.close()
+                if HAVE_OPENPYXL:
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "Checkout Log"
+                    ws.append(['Equipment ID', 'Item Name', 'Customer Name', 'Customer Phone', 'Date Checked Out', 'Due Date', 'Date Returned', 'Agreement Date'])
+                    for row in rows:
+                        ws.append([row['equipment_id'], row['item_name'], row['customer_name'], row['customer_phone'], row['checked_out_date'], row['due_date'], row['returned_date'], row['agreement_date']])
+                    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                    header_font = Font(bold=True, color="FFFFFF")
+                    for cell in ws[1]:
+                        cell.fill = header_fill
+                        cell.font = header_font
+                    output = BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+                    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='checkout_log_export.xlsx')
+                else:
+                    import csv
+                    output = BytesIO()
+                    writer = csv.writer(output)
+                    writer.writerow(['Equipment ID', 'Item Name', 'Customer Name', 'Customer Phone', 'Date Checked Out', 'Due Date', 'Date Returned', 'Agreement Date'])
+                    for row in rows:
+                        writer.writerow([row['equipment_id'], row['item_name'], row['customer_name'], row['customer_phone'], row['checked_out_date'], row['due_date'], row['returned_date'], row['agreement_date']])
+                    output.seek(0)
+                    return send_file(output, mimetype='text/csv', as_attachment=True, download_name='checkout_log_export.csv')
 
     return render_template('settings.html')
 
@@ -1339,6 +1446,7 @@ def customer_agreement(customer_id):
 
 
 @app.route('/api/equipment_search')
+@login_required
 def equipment_search():
     q = request.args.get('q', '').strip()
     try:
@@ -1527,5 +1635,15 @@ if __name__ == '__main__':
         ssl_context = (ssl_certfile, ssl_keyfile)
         log.info("TLS enabled with cert=%s", ssl_certfile)
 
-    log.info("Starting DME Checkout app on port %d (debug=%s)", args.port, debug)
-    app.run(debug=debug, host='0.0.0.0', port=args.port, ssl_context=ssl_context)
+    is_frozen = getattr(sys, 'frozen', False)
+    host = '127.0.0.1' if is_frozen else '0.0.0.0'
+
+    log.info("Starting DME Checkout app on %s:%d (debug=%s)", host, args.port, debug)
+
+    if is_frozen:
+        proto = 'https' if ssl_context else 'http'
+        url = f'{proto}://localhost:{args.port}'
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+        log.info("Browser will open to %s", url)
+
+    app.run(debug=debug, host=host, port=args.port, ssl_context=ssl_context)

@@ -130,17 +130,6 @@ def normalize_date_input(value):
     return text
 
 
-def calculate_due_date(checkout_date, checkout_period_days=CHECKOUT_PERIOD_DAYS):
-    normalized = normalize_date_input(checkout_date)
-    if not normalized:
-        return ''
-    try:
-        parsed = datetime.strptime(normalized, "%Y-%m-%d").date()
-    except ValueError:
-        return ''
-    return (parsed + timedelta(days=checkout_period_days)).isoformat()
-
-
 def escape_like(value):
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 

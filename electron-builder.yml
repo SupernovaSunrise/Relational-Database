@@ -1,0 +1,38 @@
+appId: org.menduredme.checkout
+productName: Mendure DME
+directories:
+  output: dist
+files:
+  - src/**/*
+  - package.json
+  - icon.ico
+  - "!**/*.map"
+extraResources:
+  - from: icon.ico
+    to: icon.ico
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
+  artifactName: Mendure-DME-Setup-${version}.exe
+portable:
+  artifactName: Mendure-DME-Portable-${version}.exe
+publish:
+  provider: github
+  owner: SupernovaSunrise
+  repo: Relational-Database
+  releaseType: draft
+generateUpdatesFilesForAllChannels: true

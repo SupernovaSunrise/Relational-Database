@@ -1,0 +1,114 @@
+name: Build Mendure DME
+
+on:
+  push:
+    branches: [main, master, Remote]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build installer and portable
+        id: build
+        shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          E_SIGNER_ENDPOINT: ${{ secrets.E_SIGNER_ENDPOINT }}
+          E_SIGNER_ACCOUNT: ${{ secrets.E_SIGNER_CODE_SIGNING_ACCOUNT }}
+          E_SIGNER_PROFILE: ${{ secrets.E_SIGNER_CERTIFICATE_PROFILE }}
+          E_SIGNER_PUBLISHER: ${{ secrets.E_SIGNER_PUBLISHER_NAME }}
+        run: |
+          $ebArgs = @('--publish', 'never')
+          $signed = $false
+          if ($env:AZURE_TENANT_ID -and $env:AZURE_CLIENT_ID -and $env:AZURE_CLIENT_SECRET -and $env:E_SIGNER_ENDPOINT -and $env:E_SIGNER_ACCOUNT -and $env:E_SIGNER_PROFILE) {
+            $signed = $true
+            $ebArgs += "--config.win.azureSignOptions.endpoint=$env:E_SIGNER_ENDPOINT"
+            $ebArgs += "--config.win.azureSignOptions.codeSigningAccountName=$env:E_SIGNER_ACCOUNT"
+            $ebArgs += "--config.win.azureSignOptions.certificateProfileName=$env:E_SIGNER_PROFILE"
+            if ($env:E_SIGNER_PUBLISHER) {
+              $ebArgs += "--config.win.azureSignOptions.publisherName=$env:E_SIGNER_PUBLISHER"
+            }
+          }
+          npm run dist -- @ebArgs
+          if ($signed) {
+            echo "signed=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "signed=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $setupHash = (Get-FileHash -Path "dist/Mendure-DME-Setup-$env:VERSION.exe" -Algorithm SHA256).Hash
+          "$setupHash  Mendure-DME-Setup-$env:VERSION.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
+          $portableHash = (Get-FileHash -Path "dist/Mendure-DME-Portable-$env:VERSION.exe" -Algorithm SHA256).Hash
+          "$portableHash  Mendure-DME-Portable-$env:VERSION.exe" | Out-File -Encoding ascii -Append -FilePath "dist/SHA256 checksums.txt"
+          Get-Content "dist/SHA256 checksums.txt"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mendure-DME-Setup
+          path: dist/Mendure-DME-Setup-${{ env.VERSION }}.exe
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mendure-DME-Portable
+          path: dist/Mendure-DME-Portable-${{ env.VERSION }}.exe
+
+      - name: Upload update feed
+        if: steps.build.outputs.signed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-feed
+          path: |
+            dist/latest.yml
+            dist/Mendure-DME-Setup-${{ env.VERSION }}.exe.blockmap
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHA256-checksums
+          path: dist/SHA256 checksums.txt
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Mendure-DME-Setup-${{ env.VERSION }}.exe
+            dist/Mendure-DME-Portable-${{ env.VERSION }}.exe
+            dist/SHA256 checksums.txt
+
+      - name: Attach update feed to release
+        if: github.event_name == 'release' && steps.build.outputs.signed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Mendure-DME-Setup-${{ env.VERSION }}.exe.blockmap
+            dist/latest.yml

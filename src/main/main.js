@@ -36,6 +36,7 @@ function createWindow() {
     if (url !== mainWindow.webContents.getURL()) event.preventDefault();
   });
 
+  mainWindow.maximize();
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   mainWindow.on('closed', () => {

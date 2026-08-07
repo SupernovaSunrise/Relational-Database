@@ -492,6 +492,10 @@
       loadAndRender();
     });
 
+    App.setTeardown(function () {
+      module.container = null;
+    });
+
     loadAndRender();
   }
 

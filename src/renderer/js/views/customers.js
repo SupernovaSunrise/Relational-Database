@@ -161,6 +161,9 @@
 
     container.addEventListener('click', onContainerClick);
     App.initInlineEditing(container, load);
+    App.setTeardown(function () {
+      container = null;
+    });
 
     load();
   }

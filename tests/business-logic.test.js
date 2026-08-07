@@ -1,8 +1,8 @@
 const bl = require('../src/shared/business-logic');
 const fixture = require('./fixtures/legacy-reference.json');
 
-describe('calculateDueDate parity with real Python db.py (2020-2040)', () => {
-  test('matches db.py output for every reference case in the legacy fixture', () => {
+describe('calculateDueDate parity with the legacy fixture (2020-2040)', () => {
+  test('matches the fixture output for every reference case', () => {
     const mismatches = [];
     for (const [key, expected] of Object.entries(fixture.due_results)) {
       const colon = key.indexOf(':');
@@ -57,7 +57,7 @@ describe('federal holidays', () => {
     }
   });
 
-  test('matches the real Python db.py holiday set for every year 2020-2040', () => {
+  test('matches the fixture holiday set for every year 2020-2040', () => {
     for (const [year, expected] of Object.entries(fixture.holidays_by_year)) {
       expect(Array.from(bl.federalHolidays(Number(year))).sort()).toEqual(expected);
     }
@@ -108,7 +108,7 @@ describe('federal holidays', () => {
 });
 
 describe('normalizeDateInput', () => {
-  test('matches the real Python db.py normalize_date_input for reference cases', () => {
+  test('matches the fixture normalize_date_input cases', () => {
     for (const [raw, expected] of Object.entries(fixture.normalize_results)) {
       expect(bl.normalizeDateInput(raw)).toBe(expected);
     }
@@ -142,7 +142,7 @@ describe('normalizeDateInput', () => {
 });
 
 describe('phone helpers', () => {
-  test('matches the real Python db.py normalize_phone/format_phone for reference cases', () => {
+  test('matches the fixture normalize_phone/format_phone cases', () => {
     for (const [raw, expected] of Object.entries(fixture.phone_results)) {
       expect([bl.normalizePhone(raw), bl.formatPhone(raw)]).toEqual(expected);
     }
@@ -167,7 +167,7 @@ describe('phone helpers', () => {
 });
 
 describe('escapeLike', () => {
-  test('matches the real Python db.py escape_like for reference cases', () => {
+  test('matches the fixture escape_like cases', () => {
     for (const [raw, expected] of Object.entries(fixture.escape_results)) {
       expect(bl.escapeLike(raw)).toBe(expected);
     }

@@ -8,7 +8,7 @@ DME (Durable Medical Equipment) Checkout Database — an **Electron desktop appl
 **Default branch**: `Remote`
 **Product name**: Mendure DME
 
-The app is a full rewrite of the original Flask web application. Legacy Flask files (`web_app.py`, `db.py`, `templates/`, `desktop_app.py`, `main.py`) remain in the repo as reference/oracle but are **dead code** — do not modify them. The `db.py` schema and business logic (due dates, holidays, phones) are the behavior authority that the JS port must match.
+The app is a full rewrite of the original Flask web application. The legacy Python web app and its templates have been removed from the repo. The business rules (due dates, holidays, phones) are frozen in the checked-in parity fixture at `tests/fixtures/legacy-reference.json`, which the JS port matches.
 
 ## Tech Stack
 
@@ -31,17 +31,16 @@ The app is a full rewrite of the original Flask web application. Legacy Flask fi
 | `src/main/auth.js` | Password hashing (werkzeug pbkdf2 + scrypt compatible), session, rate limiter, auth handlers |
 | `src/main/features/*.js` | Feature handlers: customers, equipment, loans, agreements, reports, import-export |
 | `src/shared/ipc-contract.js` | Channel names, payload specs (types + length caps), auth/admin gate sets |
-| `src/shared/business-logic.js` | Due dates, holidays, phones, date/escape helpers (verified parity with db.py) |
+| `src/shared/business-logic.js` | Due dates, holidays, phones, date/escape helpers (parity with the checked-in fixture) |
 | `src/preload/index.js` | contextBridge API — the only renderer→main surface, one method per channel |
 | `src/renderer/index.html` | SPA shell — strict CSP meta, nav, view container |
 | `src/renderer/js/app.js` | App namespace: session state, hash router, flash banners, inline-edit engine, HTML escaping |
 | `src/renderer/js/views/*.js` | Views: auth, master (checkout/return), customers, equipment, reports, settings, agreement |
 | `tests/*.test.js` | Jest suites: business-logic parity, auth, ipc-contract, db migration, features |
-| `scripts/generate-legacy-reference.py` | Generates the parity oracle fixture from real Python `db.py` |
+| `tests/fixtures/legacy-reference.json` | Frozen parity oracle for business rules (due dates, holidays, phones) |
 | `electron-builder.yml` | Packaging config (NSIS + portable, GitHub publish feed) |
 | `.github/workflows/build.yml` | CI: jest → electron-builder → checksums → artifacts/release |
 | `database.db` | Directory artifact only — the real DB is `userData/database.db` at runtime |
-| Legacy (dead) | `web_app.py`, `db.py`, `templates/`, `desktop_app.py`, `main.py` |
 
 ## Build & Run
 
@@ -96,21 +95,20 @@ Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
 
 ## Important Notes
 
-- `calculateDueDate()` accounts for weekends + 11 federal holidays; parity with Python `db.py` is enforced by tests using the generated fixture.
-- The legacy pytest `tests/test_agreement_date.py` has a KNOWN BUG: it expects `2024-08-20` but real `db.py` returns `2024-08-21`. The Jest port asserts the correct `2024-08-21` (parity with real Python).
+- `calculateDueDate()` accounts for weekends + 11 federal holidays; parity is enforced against the checked-in fixture (990 cases, 2020–2040).
 - `node:sqlite` requires Electron ≥ 35 (we pin ≥ 43). `DatabaseSync` is synchronous — keep operations short.
 - Jest tests must pass an explicit temp `dbPath` to `initDb()` — never let `db.js` resolve the default path (it falls back to the repo-root `database.db` dir artifact).
 - `importExport:import*` handlers ignore renderer-supplied paths; the main process always opens native `dialog` pickers.
-- Legacy Flask files stay as reference only. The build ships only `src/**/*` + `package.json` + `icon.ico`.
+- The build ships only `src/**/*` + `package.json` + `icon.ico`.
 - CI signing is wired for SSL.com eSigner via Azure Trusted Signing secrets — but ONLY runs when the secrets are present. Unsigned builds get SmartScreen warnings. Do NOT wire `electron-updater` in-app until builds are code-signed.
 
 ## Testing
 
 Jest suites in `tests/` (`*.test.js`), 159 tests / 5 suites:
-- `business-logic.test.js` — 990-case parity fixture vs real Python db.py (2020–2040 holidays/due dates), phones, dates, escape
+- `business-logic.test.js` — 990-case parity fixture (2020–2040 holidays/due dates), phones, dates, escape
 - `auth.test.js` — werkzeug 2.3.7 pbkdf2 + 3.1.3 scrypt hash vectors, register/login/rate-limit/session/change-password
 - `ipc-contract.test.js` — payload validation fail-closed, sender gate, REQUIRED_AUTH/ADMIN invariants, full handler pipeline
-- `db.test.js` — schema/index/migration-column parity with db.py, legacy DB copy, migration idempotence
+- `db.test.js` — schema/index/migration parity, legacy DB copy, migration idempotence
 - `features.test.js` — end-to-end handler flows (add/search/checkout/agreement/return/cancel/reports) on temp DBs
 
-Run: `npm test`. Python is NOT required for tests (fixture is checked in); `scripts/generate-legacy-reference.py` regenerates the oracle if db.py ever changes.
+Run: `npm test`. Python is NOT required for tests — the parity fixture is checked in.

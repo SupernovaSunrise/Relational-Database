@@ -12,6 +12,7 @@ import sqlite3
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 try:
     from openpyxl import Workbook, load_workbook
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -154,9 +155,16 @@ def login():
             user = User(user_row['id'], user_row['username'], user_row['is_admin'])
             login_user(user)
             flash('Logged in successfully.')
-            next_page = request.args.get('next')
-            if next_page and next_page.startswith('/') and not next_page.startswith('//'):
-                return redirect(next_page)
+            next_page = request.args.get('next', '')
+            normalized_next = next_page.replace('\\', '')
+            parsed_next = urlparse(normalized_next)
+            if (
+                normalized_next.startswith('/')
+                and not normalized_next.startswith('//')
+                and not parsed_next.scheme
+                and not parsed_next.netloc
+            ):
+                return redirect(normalized_next)
             return redirect(url_for('master_control'))
         if client_ip not in login_failed_log:
             login_failed_log[client_ip] = []

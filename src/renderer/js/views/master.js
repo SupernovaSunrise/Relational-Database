@@ -128,13 +128,13 @@
       ' data-customer-phone="' + esc(item.customer_phone || '') + '"' +
       ' data-checked-out-date="' + esc(item.checked_out_date || '') + '"' +
       ' data-due-date="' + esc(item.due_date || '') + '">' +
+      '<td class="col-actions">' + actionHtml + '</td>' +
       '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="equipment_id">' + esc(item.equipment_id) + '</td>' +
       '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="item_name">' + esc(item.item_name) + '</td>' +
       customerNameCell +
       customerPhoneCell +
       checkedOutCell +
       dueDateCell +
-      '<td>' + actionHtml + '</td>' +
       '</tr>';
   }
 
@@ -424,13 +424,13 @@
       '<table id="master-table">' +
         '<thead>' +
           '<tr>' +
+            '<th class="col-actions">Action</th>' +
             '<th><button type="button" class="sort-link" data-sort="equipmentId">Equipment ID <span class="sort-indicator"></span></button></th>' +
             '<th><button type="button" class="sort-link" data-sort="itemName">Equipment Name <span class="sort-indicator"></span></button></th>' +
             '<th><button type="button" class="sort-link" data-sort="customerName">Customer Name <span class="sort-indicator"></span></button></th>' +
             '<th><button type="button" class="sort-link" data-sort="customerPhone">Customer Phone # <span class="sort-indicator"></span></button></th>' +
             '<th><button type="button" class="sort-link" data-sort="checkedOutDate">Date Checked Out <span class="sort-indicator"></span></button></th>' +
             '<th><button type="button" class="sort-link" data-sort="dueDate">Return Date <span class="sort-indicator"></span></button></th>' +
-            '<th>Action</th>' +
           '</tr>' +
         '</thead>' +
         '<tbody id="master-tbody"></tbody>' +
@@ -438,6 +438,13 @@
       '<p id="master-no-results" class="no-results" hidden>No equipment matches your search.</p>';
 
     container.querySelector('#checkout-btn').addEventListener('click', checkoutFlow);
+
+    container.querySelector('#checkout-customer').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        checkoutFlow();
+      }
+    });
 
     var searchInput = container.querySelector('#master-search');
     var rafPending = false;

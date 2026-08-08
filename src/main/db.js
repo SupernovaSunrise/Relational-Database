@@ -5,9 +5,13 @@ const { formatPhone } = require('../shared/business-logic');
 
 let activeDbPath = null;
 
+function redactSensitive(message) {
+  return String(message).replace(/([a-zA-Z]:[\\/]Users[\\/])[^\\/]+/gi, '$1***');
+}
+
 function log(level, message) {
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 23);
-  console.log(`${ts} [${String(level).toUpperCase()}] dme.main.db: ${message}`);
+  console.log(`${ts} [${String(level).toUpperCase()}] dme.main.db: ${redactSensitive(message)}`);
 }
 
 function defaultDbPath() {
@@ -47,9 +51,9 @@ function migrateLegacyDbIfNeeded(targetPath) {
     const sidecar = `${legacy}${suffix}`;
     if (!fs.existsSync(sidecar)) continue;
     fs.copyFileSync(sidecar, `${targetPath}${suffix}`);
-    log('warn', `Legacy database ${legacy} has a ${suffix} sidecar; copied it to preserve newest rows. Close the legacy app before first launch of the new version`);
+    log('warn', `Legacy database has a ${suffix} sidecar; copied it to preserve newest rows. Close the legacy app before first launch of the new version`);
   }
-  log('info', `Migrated legacy database from ${legacy} to ${targetPath}`);
+  log('info', 'Migrated legacy database into app data directory');
   return true;
 }
 
@@ -215,7 +219,7 @@ function initDb(dbPath) {
   } finally {
     conn.close();
   }
-  log('info', `Database ready at ${resolved}`);
+  log('info', 'Database ready');
   return resolved;
 }
 

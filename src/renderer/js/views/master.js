@@ -36,8 +36,21 @@
     });
   }
 
+  function updateCheckoutBtn() {
+    if (!module.container) return;
+    var btn = module.container.querySelector('#checkout-btn');
+    if (!btn) return;
+    var checked = module.container.querySelectorAll('input[data-action="checkout-pick"]:checked').length;
+    btn.disabled = checked === 0;
+  }
+
   function loadAndRender() {
     var token = module.renderToken;
+    var tbody = module.container.querySelector('#master-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading equipment data...</td></tr>';
+    var noResults = module.container.querySelector('#master-no-results');
+    if (noResults) noResults.hidden = true;
+    updateCheckoutBtn();
     return loadData().then(function (ok) {
       if (ok && token === module.renderToken) render();
     });
@@ -162,7 +175,23 @@
       if (show) visible++;
     });
     var noResults = module.container.querySelector('#master-no-results');
-    if (noResults) noResults.hidden = visible !== 0;
+    if (noResults) {
+      var tabLabels = { all: '', checked_out: 'checked out', available: 'available', overdue: 'overdue' };
+      var tabWord = tabLabels[module.activeTab] || '';
+      if (visible === 0 && module.rows.length) {
+        noResults.textContent = query
+          ? 'No items match your search.'
+          : 'No ' + tabWord + ' items.';
+        noResults.hidden = false;
+      } else {
+        noResults.hidden = true;
+      }
+    }
+    var countEl = module.container.querySelector('#master-table-count');
+    if (countEl) {
+      var total = module.rows.length;
+      countEl.textContent = total ? visible + ' of ' + total + ' items' : '';
+    }
   }
 
   function applySort() {
@@ -197,6 +226,7 @@
     renderTable();
     applySort();
     applyFilters();
+    updateCheckoutBtn();
   }
 
   function doCheckout(customerId, equipmentIds) {
@@ -435,7 +465,8 @@
         '</thead>' +
         '<tbody id="master-tbody"></tbody>' +
       '</table>' +
-      '<p id="master-no-results" class="no-results" hidden>No equipment matches your search.</p>';
+      '<p id="master-table-count" class="table-count"></p>' +
+      '<p id="master-no-results" class="no-results" hidden></p>';
 
     container.querySelector('#checkout-btn').addEventListener('click', checkoutFlow);
 
@@ -495,6 +526,11 @@
     });
 
     container.addEventListener('click', onContainerClick);
+    container.addEventListener('change', function (e) {
+      if (e.target.matches && e.target.matches('input[data-action="checkout-pick"]')) {
+        updateCheckoutBtn();
+      }
+    });
     App.initInlineEditing(container, function () {
       loadAndRender();
     });

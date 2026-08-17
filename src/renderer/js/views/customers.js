@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var module = { search: '' };
+  var module = { search: '', sortBy: 'id', sortDir: 'asc', items: [] };
   var container = null;
   var debounceTimer = null;
 
@@ -15,21 +15,44 @@
         App.flash((res && res.error) || 'Failed to load customers.', 'error');
         return;
       }
-      renderTable(res.items || []);
+      module.items = res.items || [];
+      renderTable();
     });
   }
 
-  function renderTable(items) {
+  var sortKeys = {
+    id: function (c) { return String(c.id); },
+    name: function (c) { return (c.name || '').toLowerCase(); },
+    phone: function (c) { return (c.phone || '').toLowerCase(); },
+    zip_code: function (c) { return (c.zip_code || '').toLowerCase(); },
+    date_added: function (c) { return (c.date_added || '').toLowerCase(); },
+  };
+
+  function applySort() {
+    var key = sortKeys[module.sortBy];
+    if (!key) return;
+    var dir = module.sortDir === 'asc' ? 1 : -1;
+    module.items.sort(function (a, b) {
+      var aVal = key(a);
+      var bVal = key(b);
+      return aVal < bVal ? -dir : aVal > bVal ? dir : 0;
+    });
+  }
+
+  function renderTable() {
     var wrap = container.querySelector('#customers-table-wrap');
     var noResults = container.querySelector('#noResults');
-    if (!items.length) {
+    var countEl = container.querySelector('#customers-table-count');
+    applySort();
+    if (!module.items.length) {
       wrap.innerHTML = '<p>' + (module.search ? 'No customers match your search.' : 'No customers registered yet.') + '</p>';
       if (noResults) noResults.hidden = true;
+      if (countEl) countEl.textContent = '';
       return;
     }
     var esc = App.escapeHtml;
     var isAdmin = App.isAdmin();
-    var rowsHtml = items.map(function (c) {
+    var rowsHtml = module.items.map(function (c) {
       var searchText = (
         (c.name || '') + ' ' +
         (c.phone || '') + ' ' +
@@ -56,11 +79,25 @@
     wrap.innerHTML =
       '<table>' +
         '<thead>' +
-          '<tr><th>ID</th><th>Name</th><th>Phone</th><th>Zip Code</th><th>Date Added</th><th>Action</th></tr>' +
+          '<tr>' +
+            '<th><button type="button" class="sort-link" data-sort="id">ID <span class="sort-indicator"></span></button></th>' +
+            '<th><button type="button" class="sort-link" data-sort="name">Name <span class="sort-indicator"></span></button></th>' +
+            '<th><button type="button" class="sort-link" data-sort="phone">Phone <span class="sort-indicator"></span></button></th>' +
+            '<th><button type="button" class="sort-link" data-sort="zip_code">ZIP Code <span class="sort-indicator"></span></button></th>' +
+            '<th><button type="button" class="sort-link" data-sort="date_added">Date Added <span class="sort-indicator"></span></button></th>' +
+            '<th>Action</th>' +
+          '</tr>' +
         '</thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
       '</table>';
     if (noResults) noResults.hidden = true;
+    if (countEl) countEl.textContent = module.items.length + ' customers';
+
+    var links = wrap.querySelectorAll('.sort-link');
+    Array.prototype.forEach.call(links, function (link) {
+      var ind = link.querySelector('.sort-indicator');
+      if (ind) ind.textContent = link.getAttribute('data-sort') === module.sortBy ? (module.sortDir === 'asc' ? '\u25B2' : '\u25BC') : '';
+    });
   }
 
   function onContainerClick(e) {
@@ -128,21 +165,22 @@
         '<h2>Add New Customer</h2>' +
         '<form id="add-customer-form" novalidate>' +
           '<div class="form-group">' +
-            '<label for="add-customer-name">Customer Name:</label>' +
+            '<label for="add-customer-name">Customer Name</label>' +
             '<input type="text" id="add-customer-name" required>' +
           '</div>' +
           '<div class="form-group">' +
-            '<label for="add-customer-phone">Phone Number:</label>' +
+            '<label for="add-customer-phone">Phone Number</label>' +
             '<input type="tel" id="add-customer-phone" data-phone placeholder="e.g., (555) 123-4567" required>' +
           '</div>' +
           '<div class="form-group">' +
-            '<label for="add-customer-zip">Zip Code:</label>' +
+            '<label for="add-customer-zip">ZIP Code</label>' +
             '<input type="text" id="add-customer-zip" placeholder="12345" required>' +
           '</div>' +
           '<button type="submit" class="btn">Add Customer</button>' +
         '</form>' +
       '</section>' +
       '<div id="customers-table-wrap"></div>' +
+      '<p id="customers-table-count" class="table-count"></p>' +
       '<p id="noResults" class="no-results" hidden>No customers match your search.</p>';
 
     var searchInput = container.querySelector('#customer-search');
@@ -152,6 +190,19 @@
         module.search = searchInput.value;
         load();
       }, 250);
+    });
+
+    container.addEventListener('click', function (e) {
+      var link = e.target.closest ? e.target.closest('.sort-link') : null;
+      if (!link) return;
+      var col = link.getAttribute('data-sort');
+      if (module.sortBy === col && module.sortDir === 'asc') {
+        module.sortDir = 'desc';
+      } else {
+        module.sortDir = 'asc';
+      }
+      module.sortBy = col;
+      renderTable();
     });
 
     container.querySelector('#add-customer-form').addEventListener('submit', function (e) {

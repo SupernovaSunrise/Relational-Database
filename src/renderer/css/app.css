@@ -83,6 +83,7 @@ nav a:hover {
   text-decoration: none;
   display: inline-block;
   font-size: 14px;
+  transition: background-color 0.15s ease;
 }
 
 .btn:hover {
@@ -112,6 +113,15 @@ nav a:hover {
 .btn[disabled] {
   opacity: 0.6;
   cursor: default;
+}
+
+.btn:focus-visible,
+.tab-btn:focus-visible,
+.nav-btn:focus-visible,
+.nav a:focus-visible,
+.sort-link:focus-visible {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
 }
 
 .modal-overlay {
@@ -176,6 +186,13 @@ nav a:hover {
   font-size: 14px;
 }
 
+.form-group input:focus,
+.form-group select:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 1px;
+  border-color: #007bff;
+}
+
 .form-group small {
   color: #666;
 }
@@ -192,6 +209,10 @@ th, td {
   border-bottom: 1px solid #ddd;
 }
 
+tbody tr:nth-child(even) td:not([contenteditable]) {
+  background-color: #f8f9fa;
+}
+
 th {
   background-color: #f8f9fa;
   font-weight: bold;
@@ -201,6 +222,26 @@ th {
   padding: 10px;
   margin-bottom: 15px;
   border-radius: 4px;
+  position: relative;
+}
+
+.alert-close {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.alert-close:hover {
+  opacity: 1;
 }
 
 .alert-success {
@@ -219,12 +260,14 @@ td[contenteditable="true"] {
   background-color: #fffbe6;
   border: 1px dashed transparent;
   min-width: 90px;
+  cursor: pointer;
 }
 
 td[contenteditable="true"]:focus {
   outline: 2px solid #007bff;
   background-color: #ffffff;
   border-color: #007bff;
+  cursor: text;
 }
 
 .tab-bar {
@@ -242,6 +285,7 @@ td[contenteditable="true"]:focus {
   cursor: pointer;
   font-size: 14px;
   color: #333;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .tab-btn:hover {
@@ -366,6 +410,10 @@ tr.overdue-row td:first-child {
 
 .no-results {
   margin-top: 20px;
+  text-align: center;
+  color: #666;
+  padding: 30px 0;
+  font-size: 15px;
 }
 
 .loading {
@@ -561,17 +609,27 @@ tr.overdue-row td:first-child {
   padding-bottom: 8px;
 }
 
+.table-count {
+  margin-top: 8px;
+  color: #666;
+  font-size: 13px;
+}
+
 .col-actions {
   width: 180px;
 }
 
 @media print {
+  @page {
+    size: Letter;
+    margin: 0.5in;
+  }
   nav, .no-print, .report-filters, .print-button, .tab-bar, .alert, .checkout-bar, .filter-row, .form-grid {
     display: none !important;
   }
   body {
     background: white;
-    padding: 0.5in 0.75in;
+    padding: 0;
   }
   .container {
     box-shadow: none;
@@ -598,5 +656,46 @@ tr.overdue-row td:first-child {
   #report-results .col-actions,
   #master-table .col-actions {
     display: none !important;
+  }
+  .card-body h2 {
+    font-size: 18px;
+    margin: 0 0 6px;
+  }
+  .card-body h4 {
+    font-size: 13px;
+    margin: 8px 0 4px;
+  }
+  .card-body p {
+    margin: 2px 0;
+    line-height: 1.25;
+    font-size: 12px;
+  }
+  .card-body ul {
+    margin: 2px 0;
+    padding-left: 18px;
+    font-size: 12px;
+  }
+  .card-body li {
+    line-height: 1.3;
+  }
+  .card-body table {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .card-body th,
+  .card-body td {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .sig-img {
+    max-width: 250px;
+  }
+  #return_by_hint {
+    display: none;
+  }
+  .card-body .customer-info-field {
+    border-bottom: none;
+    padding: 0;
+    width: auto;
   }
 }

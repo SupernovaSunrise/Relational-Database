@@ -39,10 +39,20 @@
     var div = document.createElement('div');
     div.className = 'alert ' + (type === 'error' ? 'alert-error' : 'alert-success');
     div.textContent = message;
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'alert-close';
+    closeBtn.setAttribute('aria-label', 'Dismiss');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.addEventListener('click', function () {
+      if (div.parentNode) div.parentNode.removeChild(div);
+    });
+    div.appendChild(closeBtn);
     flashContainer.appendChild(div);
+    var timeout = type === 'error' ? 12000 : 8000;
     setTimeout(function () {
       if (div.parentNode) div.parentNode.removeChild(div);
-    }, 8000);
+    }, timeout);
   }
 
   var currentTeardown = null;

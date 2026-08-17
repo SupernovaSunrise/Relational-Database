@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var module = { search: '' };
+  var module = { search: '', sortBy: 'equipment_id', sortDir: 'asc', items: [] };
   var container = null;
   var debounceTimer = null;
 
@@ -15,21 +15,43 @@
         App.flash((res && res.error) || 'Failed to load equipment.', 'error');
         return;
       }
-      renderTable(res.items || []);
+      module.items = res.items || [];
+      renderTable();
     });
   }
 
-  function renderTable(items) {
+  var sortKeys = {
+    equipment_id: function (i) { return (i.equipment_id || '').toLowerCase(); },
+    item_name: function (i) { return (i.item_name || '').toLowerCase(); },
+    date_verified: function (i) { return (i.date_verified || '').toLowerCase(); },
+    status: function (i) { return i.loan_id ? 'checked_out' : 'available'; },
+  };
+
+  function applySort() {
+    var key = sortKeys[module.sortBy];
+    if (!key) return;
+    var dir = module.sortDir === 'asc' ? 1 : -1;
+    module.items.sort(function (a, b) {
+      var aVal = key(a);
+      var bVal = key(b);
+      return aVal < bVal ? -dir : aVal > bVal ? dir : 0;
+    });
+  }
+
+  function renderTable() {
     var wrap = container.querySelector('#equipment-table-wrap');
     var noResults = container.querySelector('#noResults');
-    if (!items.length) {
+    var countEl = container.querySelector('#equipment-table-count');
+    applySort();
+    if (!module.items.length) {
       wrap.innerHTML = '<p>' + (module.search ? 'No equipment matches your search.' : 'No equipment registered yet.') + '</p>';
       if (noResults) noResults.hidden = true;
+      if (countEl) countEl.textContent = '';
       return;
     }
     var esc = App.escapeHtml;
     var isAdmin = App.isAdmin();
-    var rowsHtml = items.map(function (item) {
+    var rowsHtml = module.items.map(function (item) {
       var searchText = (
         (item.equipment_id || '') + ' ' +
         (item.item_name || '') + ' ' +
@@ -41,7 +63,7 @@
       var actions = '';
       if (isAdmin) {
         if (!item.loan_id) {
-          actions += '<button type="button" class="btn" data-action="sell-equipment" data-equipment-id="' + esc(item.equipment_id) + '">Sold</button> ';
+          actions += '<button type="button" class="btn" data-action="sell-equipment" data-equipment-id="' + esc(item.equipment_id) + '">Sell</button> ';
         }
         actions += '<button type="button" class="btn btn-danger" data-action="delete-equipment" data-equipment-id="' + esc(item.equipment_id) + '">Delete</button>';
       }
@@ -57,11 +79,24 @@
     wrap.innerHTML =
       '<table>' +
         '<thead>' +
-          '<tr><th>Equipment ID</th><th>Item Name</th><th>Date Verified</th><th>Status</th><th>Action</th></tr>' +
+          '<tr>' +
+            '<th><button type="button" class="sort-link" data-sort="equipment_id">Equipment ID <span class="sort-indicator"></span></button></th>' +
+            '<th><button type="button" class="sort-link" data-sort="item_name">Item Name <span class="sort-indicator"></span></button></th>' +
+            '<th><button type="button" class="sort-link" data-sort="date_verified">Date Verified <span class="sort-indicator"></span></button></th>' +
+            '<th><button type="button" class="sort-link" data-sort="status">Status <span class="sort-indicator"></span></button></th>' +
+            '<th>Action</th>' +
+          '</tr>' +
         '</thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
       '</table>';
     if (noResults) noResults.hidden = true;
+    if (countEl) countEl.textContent = module.items.length + ' items';
+
+    var links = wrap.querySelectorAll('.sort-link');
+    Array.prototype.forEach.call(links, function (link) {
+      var ind = link.querySelector('.sort-indicator');
+      if (ind) ind.textContent = link.getAttribute('data-sort') === module.sortBy ? (module.sortDir === 'asc' ? '\u25B2' : '\u25BC') : '';
+    });
   }
 
   function openSellModal(equipmentId) {
@@ -121,6 +156,15 @@
         confirmSell();
       } else if (e.key === 'Escape') {
         close();
+      } else if (e.key === 'Tab') {
+        var focusable = overlay.querySelectorAll('input, button');
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
       }
     });
     input.focus();
@@ -185,17 +229,18 @@
         '<h2>Add New Equipment</h2>' +
         '<form id="add-equipment-form" novalidate>' +
           '<div class="form-group">' +
-            '<label for="add-equipment-id">Equipment ID (AA-0000 format):</label>' +
+            '<label for="add-equipment-id">Equipment ID (AA-0000 format)</label>' +
             '<input type="text" id="add-equipment-id" placeholder="e.g., AB-1234" required>' +
           '</div>' +
           '<div class="form-group">' +
-            '<label for="add-item-name">Item Name:</label>' +
+            '<label for="add-item-name">Item Name</label>' +
             '<input type="text" id="add-item-name" placeholder="e.g., Wheelchair" required>' +
           '</div>' +
           '<button type="submit" class="btn">Add Equipment</button>' +
         '</form>' +
       '</section>' +
       '<div id="equipment-table-wrap"></div>' +
+      '<p id="equipment-table-count" class="table-count"></p>' +
       '<p id="noResults" class="no-results" hidden>No equipment matches your search.</p>';
 
     var searchInput = container.querySelector('#equipment-search');
@@ -205,6 +250,19 @@
         module.search = searchInput.value;
         load();
       }, 250);
+    });
+
+    container.addEventListener('click', function (e) {
+      var link = e.target.closest ? e.target.closest('.sort-link') : null;
+      if (!link) return;
+      var col = link.getAttribute('data-sort');
+      if (module.sortBy === col && module.sortDir === 'asc') {
+        module.sortDir = 'desc';
+      } else {
+        module.sortDir = 'asc';
+      }
+      module.sortBy = col;
+      renderTable();
     });
 
     container.querySelector('#add-equipment-form').addEventListener('submit', function (e) {

@@ -71,7 +71,7 @@
       if (months.length) {
         html +=
           '<div class="month-filter-row">' +
-            '<label for="report-month"><strong>Month:</strong></label>' +
+            '<label for="report-month">Month</label>' +
             '<select id="report-month">' +
             months.map(function (month) {
               return '<option value="' + esc(month) + '"' + (month === module.monthFilter ? ' selected' : '') + '>' + esc(month) + '</option>';
@@ -215,17 +215,17 @@
         '<button type="button" class="tab-btn" data-tab="checkout">Checkout Log</button>' +
         '<button type="button" class="tab-btn" data-tab="item_sales">Item Sales Log</button>' +
       '</div>' +
-      '<div class="report-filters">' +
+        '<div class="report-filters">' +
         '<div class="form-group">' +
-          '<label for="report-year"><strong>Filter by Year:</strong></label>' +
+          '<label for="report-year">Filter by Year</label>' +
           '<select id="report-year"></select>' +
         '</div>' +
         '<div class="form-group" id="date-from-group" hidden>' +
-          '<label for="report-date-from"><strong>From:</strong></label>' +
+          '<label for="report-date-from">From</label>' +
           '<input type="date" id="report-date-from">' +
         '</div>' +
         '<div class="form-group" id="date-to-group" hidden>' +
-          '<label for="report-date-to"><strong>To:</strong></label>' +
+          '<label for="report-date-to">To</label>' +
           '<input type="date" id="report-date-to">' +
         '</div>' +
         '<div class="report-filter-actions">' +

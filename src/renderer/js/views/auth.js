@@ -38,6 +38,8 @@
           });
         }
         App.flash((res && res.error) || 'Invalid username or password.', 'error');
+        passwordInput.value = '';
+        passwordInput.focus();
       });
     });
 
@@ -62,6 +64,7 @@
           '<div class="form-group">' +
             '<label for="register-confirm">Confirm Password</label>' +
             '<input type="password" id="register-confirm" autocomplete="new-password" required>' +
+            '<small id="register-confirm-error" class="error-text" hidden>Passwords do not match</small>' +
           '</div>' +
           '<button type="submit" class="btn btn-block">Create Account</button>' +
         '</form>' +
@@ -71,6 +74,19 @@
     var usernameInput = container.querySelector('#register-username');
     var passwordInput = container.querySelector('#register-password');
     var confirmInput = container.querySelector('#register-confirm');
+    var confirmError = container.querySelector('#register-confirm-error');
+
+    function checkPasswordMatch() {
+      var pw = passwordInput.value;
+      var cf = confirmInput.value;
+      if (cf && pw !== cf) {
+        confirmError.hidden = false;
+      } else {
+        confirmError.hidden = true;
+      }
+    }
+    passwordInput.addEventListener('input', checkPasswordMatch);
+    confirmInput.addEventListener('input', checkPasswordMatch);
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -91,8 +107,13 @@
       }
       window.dme.authRegister(username, password).then(function (res) {
         if (res && res.ok) {
-          App.flash(res.message || 'Account created successfully. Please log in.', 'success');
-          return App.refreshSession().then(function () {
+          App.flash(res.message || 'Account created successfully.', 'success');
+          return window.dme.authLogin(username, password).then(function (loginRes) {
+            if (loginRes && loginRes.ok) {
+              return App.refreshSession().then(function () {
+                App.navigate('master');
+              });
+            }
             App.navigate('login');
           });
         }

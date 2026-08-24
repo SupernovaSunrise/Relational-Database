@@ -148,11 +148,11 @@
         '<p class="no-print"><strong>Checkout Date:</strong> <input class="customer-info-field" type="text" id="checkout_date" value="' + esc(params.checkoutDate || first.checkoutDate || App.todayIso()) + '" placeholder="YYYY-MM-DD" autocomplete="off"></p>' +
         '<p><strong>Return By:</strong> <input class="customer-info-field" type="text" id="return_by" value="' + esc(params.dueDate || first.dueDate || '') + '" placeholder="YYYY-MM-DD" autocomplete="off"> <span id="return_by_hint">(' + checkoutPeriodDays + ' days)</span></p>' +
         '<p><strong>Equipment:</strong></p>' +
-        '<ul>' + items.map(function (item) {
+        '<div class="equip-columns"><ul>' + items.map(function (item) {
           return '<li>' + esc(item.equipment_id) + (item.item_name ? ' — ' + esc(item.item_name) : '') + '</li>';
-        }).join('') + '</ul>' +
+        }).join('') + '</ul></div>' +
         '<h4>General Terms of Use and Loan Agreement</h4>' +
-        TERMS +
+        '<div class="terms-text">' + TERMS + '</div>' +
         '<form id="agreement-form" novalidate>' +
           '<div class="form-check">' +
             '<input class="form-check-input" type="checkbox" id="waiver_agreed">' +
@@ -300,20 +300,19 @@
         '<p><strong>Zip:</strong> ' + esc(res.customer.zip_code || '') + '</p>' +
         '<p><strong>Most Recent Agreement Date:</strong> ' + esc(res.agreementDate || 'Not recorded') + '</p>' +
         '<h4>Equipment on This Agreement</h4>' +
-        '<table>' +
-          '<thead><tr><th>Equipment</th><th>Checkout Date</th><th>Return By</th></tr></thead>' +
+        '<table class="equip-table">' +
+          '<thead><tr><th>Equipment</th><th>Return By</th></tr></thead>' +
           '<tbody>' +
           (res.items || []).map(function (item) {
             return '<tr>' +
               '<td>' + esc(item.equipment_id) + (item.item_name ? ' - ' + esc(item.item_name) : '') + '</td>' +
-              '<td>' + esc(item.checked_out_date || '') + '</td>' +
               '<td>' + esc(item.due_date || '') + '</td>' +
             '</tr>';
           }).join('') +
           '</tbody>' +
         '</table>' +
         '<h4>General Terms of Use and Loan Agreement</h4>' +
-        TERMS +
+        '<div class="terms-text">' + TERMS + '</div>' +
         '<h4>Digital Signature</h4>' +
         (res.signatureData
           ? '<img class="sig-img" src="' + esc(res.signatureData) + '" alt="Customer signature">'

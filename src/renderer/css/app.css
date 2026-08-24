@@ -709,6 +709,9 @@ tr.overdue-row td:first-child {
     display: block;
     margin-top: 2px;
   }
+  .sig-section {
+    page-break-inside: avoid;
+  }
   #return_by_hint {
     display: none;
   }

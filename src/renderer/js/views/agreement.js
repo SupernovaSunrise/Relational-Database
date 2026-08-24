@@ -313,10 +313,12 @@
         '</table>' +
         '<h4>General Terms of Use and Loan Agreement</h4>' +
         '<div class="terms-text">' + TERMS + '</div>' +
-        '<h4>Digital Signature</h4>' +
-        (res.signatureData
-          ? '<img class="sig-img" src="' + esc(res.signatureData) + '" alt="Customer signature">'
-          : '<p>No signature saved.</p>') +
+        '<div class="sig-section">' +
+          '<h4>Digital Signature</h4>' +
+          (res.signatureData
+            ? '<img class="sig-img" src="' + esc(res.signatureData) + '" alt="Customer signature">'
+            : '<p>No signature saved.</p>') +
+        '</div>' +
         '<div class="agreement-actions no-print">' +
           '<button type="button" class="btn" id="agreement-print-btn">Print</button>' +
           '<a class="btn" href="#/master">Back to Home</a>' +

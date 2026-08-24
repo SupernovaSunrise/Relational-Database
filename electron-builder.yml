@@ -30,9 +30,4 @@ nsis:
   artifactName: Mendure-DME-Setup-${version}.exe
 portable:
   artifactName: Mendure-DME-Portable-${version}.exe
-publish:
-  provider: github
-  owner: SupernovaSunrise
-  repo: Relational-Database
-  releaseType: draft
 generateUpdatesFilesForAllChannels: true

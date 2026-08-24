@@ -63,6 +63,7 @@ jobs:
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
+          Remove-Item -Force "dist/builder-debug.yml" -ErrorAction SilentlyContinue
           $setupHash = (Get-FileHash -Path "dist/Mendure-DME-Setup-$env:VERSION.exe" -Algorithm SHA256).Hash
           "$setupHash  Mendure-DME-Setup-$env:VERSION.exe" | Out-File -Encoding ascii -FilePath "dist/SHA256 checksums.txt"
           $portableHash = (Get-FileHash -Path "dist/Mendure-DME-Portable-$env:VERSION.exe" -Algorithm SHA256).Hash

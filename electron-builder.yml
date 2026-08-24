@@ -23,7 +23,7 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
-  createDesktopShortcut: true
+  createDesktopShortcut: false
   createStartMenuShortcut: true
   installerIcon: icon.ico
   uninstallerIcon: icon.ico

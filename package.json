@@ -10,8 +10,8 @@
   "scripts": {
     "start": "electron .",
     "test": "jest --runInBand",
-    "dist": "electron-builder",
-    "dist:portable": "electron-builder --win portable"
+    "dist": "electron-builder && if exist dist\\builder-debug.yml del /q dist\\builder-debug.yml",
+    "dist:portable": "electron-builder --win portable && if exist dist\\builder-debug.yml del /q dist\\builder-debug.yml"
   },
   "devDependencies": {
     "electron": "^43.2.0",

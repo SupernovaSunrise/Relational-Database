@@ -16,3 +16,4 @@ installer/
 *.spec
 *.exe
 node_modules/
+builder-debug.yml

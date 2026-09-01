@@ -47,7 +47,7 @@
   function loadAndRender() {
     var token = module.renderToken;
     var tbody = module.container.querySelector('#master-tbody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading equipment data...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="loading">Loading equipment data...</td></tr>';
     var noResults = module.container.querySelector('#master-no-results');
     if (noResults) noResults.hidden = true;
     updateCheckoutBtn();
@@ -131,6 +131,9 @@
     var dueDateCell = item.loan_id
       ? '<td contenteditable="true" data-table="loans" data-row-id="' + item.loan_id + '" data-field="due_date">' + esc(item.due_date || '') + '</td>'
       : '<td>' + esc(item.due_date || '') + '</td>';
+    var extendCell = item.loan_id
+      ? '<td><button type="button" class="btn" data-action="extend" data-loan-id="' + item.loan_id + '">Extend</button></td>'
+      : '<td></td>';
 
     return '<tr class="master-row' + (status === 'overdue' ? ' overdue-row' : '') + '"' +
       ' data-status="' + status + '"' +
@@ -148,13 +151,14 @@
       customerPhoneCell +
       checkedOutCell +
       dueDateCell +
+      extendCell +
       '</tr>';
   }
 
   function renderTable() {
     var tbody = module.container.querySelector('#master-tbody');
     if (!module.rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7">No equipment registered yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8">No equipment registered yet.</td></tr>';
     } else {
       tbody.innerHTML = module.rows.map(buildRowHtml).join('');
     }
@@ -293,6 +297,17 @@
     });
   }
 
+  function extendLoan(loanId) {
+    window.dme.loansExtend(Number(loanId)).then(function (res) {
+      if (res && res.ok) {
+        App.flash(res.message || 'Return date extended.', 'success');
+      } else {
+        App.flash((res && res.error) || 'Failed to extend return date.', 'error');
+      }
+      loadAndRender();
+    });
+  }
+
   function onContainerClick(e) {
     var tab = e.target.closest ? e.target.closest('.tab-btn') : null;
     if (tab) {
@@ -310,6 +325,8 @@
 
     if (action === 'return') {
       returnLoan(btn.getAttribute('data-loan-id'));
+    } else if (action === 'extend') {
+      extendLoan(btn.getAttribute('data-loan-id'));
     } else if (action === 'view-agreement') {
       App.navigate('agreement', { mode: 'view', customerId: btn.getAttribute('data-customer-id') });
     } else if (action === 'candidate-select') {
@@ -461,6 +478,7 @@
             '<th><button type="button" class="sort-link" data-sort="customerPhone">Customer Phone # <span class="sort-indicator"></span></button></th>' +
             '<th><button type="button" class="sort-link" data-sort="checkedOutDate">Date Checked Out <span class="sort-indicator"></span></button></th>' +
             '<th><button type="button" class="sort-link" data-sort="dueDate">Return Date <span class="sort-indicator"></span></button></th>' +
+            '<th>Extend</th>' +
           '</tr>' +
         '</thead>' +
         '<tbody id="master-tbody"></tbody>' +

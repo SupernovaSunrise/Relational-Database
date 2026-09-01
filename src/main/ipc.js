@@ -140,6 +140,7 @@ function registerIpcHandlers() {
   registerChannel(CHANNELS.LOANS_GET_MASTER_DATA, loans.getMasterDataHandler);
   registerChannel(CHANNELS.LOANS_CHECKOUT, loans.checkoutHandler);
   registerChannel(CHANNELS.LOANS_RETURN, loans.returnHandler);
+  registerChannel(CHANNELS.LOANS_EXTEND, loans.extendHandler);
   registerChannel(CHANNELS.LOANS_CANCEL_PENDING, loans.cancelPendingHandler);
   registerChannel(CHANNELS.LOANS_INLINE_UPDATE, loans.inlineUpdateHandler);
 

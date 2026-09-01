@@ -27,11 +27,15 @@ function listHandler(event, payload) {
     const params = [];
     if (search) {
       const searchPattern = `%${escapeLike(search)}%`;
-      const digitsSearchPattern = `%${escapeLike(normalizePhone(search))}%`;
+      const digits = escapeLike(normalizePhone(search));
       query +=
-        "WHERE name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR zip_code LIKE ? ESCAPE '\\' " +
-        `OR ${PHONE_STRIP_SQL} LIKE ? ESCAPE '\\' ORDER BY name`;
-      params.push(searchPattern, searchPattern, searchPattern, digitsSearchPattern);
+        "WHERE name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR zip_code LIKE ? ESCAPE '\\'";
+      params.push(searchPattern, searchPattern, searchPattern);
+      if (digits) {
+        query += ` OR ${PHONE_STRIP_SQL} LIKE ? ESCAPE '\\'`;
+        params.push(`%${digits}%`);
+      }
+      query += ' ORDER BY name';
     } else {
       query += 'ORDER BY name';
     }

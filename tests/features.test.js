@@ -103,7 +103,11 @@ describe('customers feature', () => {
     expect(all.ok).toBe(true);
     expect(all.items.map((c) => c.name)).toEqual(['Alice Smith', 'Bob Jones']);
     const byName = customers.listHandler(evt, { search: 'ali' });
-    expect(byName.items.map((c) => c.name)).toEqual(['Alice Smith', 'Bob Jones']);
+    expect(byName.items.map((c) => c.name)).toEqual(['Alice Smith']);
+    const byTextOnly = customers.listHandler(evt, { search: 'nonexistent-name' });
+    expect(byTextOnly.items).toEqual([]);
+    const byExactPhone = customers.listHandler(evt, { search: '(406) 555-1234' });
+    expect(byExactPhone.items.map((c) => c.name)).toEqual(['Alice Smith']);
     const byZip = customers.listHandler(evt, { search: '59901' });
     expect(byZip.items.map((c) => c.name)).toEqual(['Alice Smith']);
     const byPhone = customers.listHandler(evt, { search: '406' });
@@ -218,6 +222,7 @@ describe('equipment feature', () => {
     expect(all.items.every((i) => i.loan_id === null)).toBe(true);
     loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
     const afterCheckout = equipment.listHandler(evt, { search: 'walker' });
+    expect(afterCheckout.items.map((i) => i.equipment_id)).toEqual(['AA-0001']);
     expect(afterCheckout.items[0].loan_id).toBeNull();
   });
 
@@ -487,6 +492,28 @@ describe('loans feature', () => {
     expect(loan.returned_date).toBe(todayIso());
     const master = loans.getMasterDataHandler(evt, {});
     expect(master.availableEquipment.map((e) => e.equipment_id)).toEqual(['AA-0001']);
+  });
+
+  test('extendHandler extends an active loan due date using business rules', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    checkoutAndAgree(customerId, ['AA-0001'], '2024-03-01', '2024-03-01');
+    const before = db.withDb((conn) => conn.prepare('SELECT due_date FROM loans WHERE id = 1').get());
+    const result = loans.extendHandler(evt, { loanId: 1 });
+    expect(result.ok).toBe(true);
+    expect(result.dueDate).toBe(calculateDueDate(todayIso()));
+    const after = db.withDb((conn) => conn.prepare('SELECT due_date FROM loans WHERE id = 1').get());
+    expect(after.due_date).toBe(result.dueDate);
+    expect(after.due_date).not.toBe(before.due_date);
+  });
+
+  test('extendHandler rejects unknown and returned loans', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    expect(loans.extendHandler(evt, { loanId: 999 })).toEqual({ ok: false, error: 'Active loan not found.' });
+    checkoutAndAgree(customerId, ['AA-0001'], '2024-03-01', '2024-03-01');
+    loans.returnHandler(evt, { loanId: 1 });
+    expect(loans.extendHandler(evt, { loanId: 1 })).toEqual({ ok: false, error: 'Active loan not found.' });
   });
 
   test('cancelPendingHandler removes pending loans', () => {

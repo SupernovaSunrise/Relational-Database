@@ -23,6 +23,7 @@ const CHANNELS = Object.freeze({
   LOANS_GET_MASTER_DATA: 'loans:getMasterData',
   LOANS_CHECKOUT: 'loans:checkout',
   LOANS_RETURN: 'loans:return',
+  LOANS_EXTEND: 'loans:extend',
   LOANS_CANCEL_PENDING: 'loans:cancelPending',
   LOANS_INLINE_UPDATE: 'loans:inlineUpdate',
 
@@ -64,6 +65,7 @@ const PAYLOADS = Object.freeze({
   [CHANNELS.LOANS_GET_MASTER_DATA]: {},
   [CHANNELS.LOANS_CHECKOUT]: { customerId: 'number', equipmentIds: 'string[]:50', checkoutDate: 'string:32?' },
   [CHANNELS.LOANS_RETURN]: { loanId: 'number' },
+  [CHANNELS.LOANS_EXTEND]: { loanId: 'number' },
   [CHANNELS.LOANS_CANCEL_PENDING]: { loanIds: 'number[]:50' },
   [CHANNELS.LOANS_INLINE_UPDATE]: { loanId: 'number', field: 'string:64', value: 'string:32' },
   [CHANNELS.AGREEMENTS_GET_LOAN]: { loanId: 'number' },

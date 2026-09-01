@@ -113,6 +113,18 @@ function returnHandler(event, payload) {
   });
 }
 
+function extendHandler(event, payload) {
+  return db.withDb((conn) => {
+    const loan = conn.prepare('SELECT id FROM loans WHERE id = ? AND returned_date IS NULL').get(payload.loanId);
+    if (!loan) {
+      return { ok: false, error: 'Active loan not found.' };
+    }
+    const newDueDate = calculateDueDate(todayIso()) || todayIso();
+    conn.prepare('UPDATE loans SET due_date = ? WHERE id = ?').run(newDueDate, payload.loanId);
+    return { ok: true, message: `Return date extended to ${newDueDate}.`, dueDate: newDueDate };
+  });
+}
+
 function inlineUpdateHandler(event, payload) {
   const { loanId, field, value } = payload;
   if (!['checked_out_date', 'due_date'].includes(field)) {
@@ -166,6 +178,7 @@ module.exports = {
   getMasterDataHandler,
   checkoutHandler,
   returnHandler,
+  extendHandler,
   cancelPendingHandler,
   inlineUpdateHandler,
 };

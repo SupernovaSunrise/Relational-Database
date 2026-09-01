@@ -29,6 +29,7 @@ const api = {
   loansGetMasterData: () => invoke('loans:getMasterData'),
   loansCheckout: (customerId, equipmentIds, checkoutDate) => invoke('loans:checkout', { customerId, equipmentIds, checkoutDate }),
   loansReturn: (loanId) => invoke('loans:return', { loanId }),
+  loansExtend: (loanId) => invoke('loans:extend', { loanId }),
   loansCancelPending: (loanIds) => invoke('loans:cancelPending', { loanIds }),
   loansInlineUpdate: (loanId, field, value) => invoke('loans:inlineUpdate', { loanId, field, value }),
 

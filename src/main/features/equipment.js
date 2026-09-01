@@ -24,12 +24,15 @@ function listHandler(event, payload) {
     const params = [];
     if (search) {
       const searchPattern = `%${escapeLike(search)}%`;
-      const digitsSearchPattern = `%${escapeLike(normalizePhone(search))}%`;
+      const digits = escapeLike(normalizePhone(search));
       query +=
         "WHERE equipment.equipment_id LIKE ? ESCAPE '\\' OR equipment.item_name LIKE ? ESCAPE '\\' " +
-        "OR customers.name LIKE ? ESCAPE '\\' OR customers.phone LIKE ? ESCAPE '\\' " +
-        `OR ${CUSTOMER_PHONE_STRIP_SQL} LIKE ? ESCAPE '\\' `;
-      params.push(searchPattern, searchPattern, searchPattern, searchPattern, digitsSearchPattern);
+        "OR customers.name LIKE ? ESCAPE '\\' OR customers.phone LIKE ? ESCAPE '\\'";
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+      if (digits) {
+        query += ` OR ${CUSTOMER_PHONE_STRIP_SQL} LIKE ? ESCAPE '\\'`;
+        params.push(`%${digits}%`);
+      }
     }
     query += 'ORDER BY equipment.equipment_id';
     const rows = conn.prepare(query).all(...params).map((row) => ({ ...row }));

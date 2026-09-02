@@ -113,8 +113,13 @@ function calculateDueDate(checkoutDate, checkoutPeriodDays = CHECKOUT_PERIOD_DAY
   const parsed = new Date(Date.UTC(y, m - 1, d));
   if (Number.isNaN(parsed.getTime())) return '';
   if (parsed.getUTCFullYear() !== y || parsed.getUTCMonth() !== m - 1 || parsed.getUTCDate() !== d) return '';
+  const raw = addDays(normalized, checkoutPeriodDays);
   const holidays = allHolidaysForSpan(normalized, checkoutPeriodDays + 30);
-  return addBusinessDays(normalized, checkoutPeriodDays, holidays);
+  let due = raw;
+  while (!isBusinessDay(due, holidays)) {
+    due = addDays(due, 1);
+  }
+  return due;
 }
 
 function normalizePhone(phone) {

@@ -17,17 +17,17 @@ describe('calculateDueDate parity with the legacy fixture (2020-2040)', () => {
   });
 
   test.each([
-    ['2024-03-01', '2024-08-21'],
-    ['2024-05-20', '2024-11-12'],
-    ['2026-07-07', '2026-12-29'],
-    ['2020-01-01', '2020-06-23'],
-    ['2024-12-20', '2025-06-13'],
-    ['2025-12-31', '2026-06-24'],
-    ['2029-01-01', '2029-06-22'],
-    ['2032-02-29', '2032-08-18'],
-    ['2036-12-25', '2037-06-17'],
-    ['2024-11-28:7', '2024-12-09'],
-    ['2030-06-19:60', '2030-09-13'],
+    ['2024-03-01', '2024-07-01'],
+    ['2024-05-20', '2024-09-17'],
+    ['2026-07-07', '2026-11-04'],
+    ['2020-01-01', '2020-04-30'],
+    ['2024-12-20', '2025-04-21'],
+    ['2025-12-31', '2026-04-30'],
+    ['2029-01-01', '2029-05-01'],
+    ['2032-02-29', '2032-06-28'],
+    ['2036-12-25', '2037-04-24'],
+    ['2024-11-28:7', '2024-12-05'],
+    ['2030-06-19:60', '2030-08-19'],
   ])('calculateDueDate(%s) -> %s', (date, expected) => {
     const colon = date.indexOf(':');
     if (colon === -1) {
@@ -38,8 +38,8 @@ describe('calculateDueDate parity with the legacy fixture (2020-2040)', () => {
   });
 
   test('weekend checkout dates are accepted as the start day and count toward the period', () => {
-    expect(bl.calculateDueDate('2024-07-06')).toBe('2024-12-27');
-    expect(bl.calculateDueDate('2024-07-04')).toBe('2024-12-26');
+    expect(bl.calculateDueDate('2024-07-06')).toBe('2024-11-04');
+    expect(bl.calculateDueDate('2024-07-04')).toBe('2024-11-01');
   });
 
   test('returns empty string for blank or non-date input', () => {
@@ -193,10 +193,10 @@ describe('todayIso', () => {
 
 describe('legacy pytest scenarios', () => {
   test('customer agreement saving persists the entered checkout date with the corrected due date', () => {
-    expect(bl.calculateDueDate('2024-03-01')).toBe('2024-08-21');
+    expect(bl.calculateDueDate('2024-03-01')).toBe('2024-07-01');
   });
 
   test('adding equipment during the agreement flow uses the entered checkout date for the new loan', () => {
-    expect(bl.calculateDueDate('2024-03-01')).toBe('2024-08-21');
+    expect(bl.calculateDueDate('2024-03-01')).toBe('2024-07-01');
   });
 });

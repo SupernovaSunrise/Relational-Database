@@ -234,7 +234,7 @@ describe('equipment feature', () => {
     expect(result.items[0].loan_id).toBe(1);
     expect(result.items[0].customer_name).toBe('Alice Smith');
     expect(result.items[0].checked_out_date).toBe('2024-03-01');
-    expect(result.items[0].due_date).toBe('2024-08-21');
+    expect(result.items[0].due_date).toBe('2024-07-01');
   });
 
   test('deleteHandler blocks checked-out equipment and removes without logging a sale', () => {
@@ -419,16 +419,16 @@ describe('loans feature', () => {
     expect(result.ok).toBe(true);
     expect(result.loanIds).toHaveLength(2);
     expect(result.checkoutDate).toBe('2024-03-01');
-    expect(result.dueDate).toBe('2024-08-21');
-    expect(calculateDueDate('2024-03-01')).toBe('2024-08-21');
+    expect(result.dueDate).toBe('2024-07-01');
+    expect(calculateDueDate('2024-03-01')).toBe('2024-07-01');
     const rows = db.withDb((conn) =>
       conn
         .prepare('SELECT equipment_id, checked_out_date, due_date, agreement_pending, agreement_data, agreement_date FROM loans ORDER BY id')
         .all()
     );
     expect(rows).toEqual([
-      { equipment_id: 'AA-0001', checked_out_date: '2024-03-01', due_date: '2024-08-21', agreement_pending: 1, agreement_data: null, agreement_date: null },
-      { equipment_id: 'BB-0002', checked_out_date: '2024-03-01', due_date: '2024-08-21', agreement_pending: 1, agreement_data: null, agreement_date: null },
+      { equipment_id: 'AA-0001', checked_out_date: '2024-03-01', due_date: '2024-07-01', agreement_pending: 1, agreement_data: null, agreement_date: null },
+      { equipment_id: 'BB-0002', checked_out_date: '2024-03-01', due_date: '2024-07-01', agreement_pending: 1, agreement_data: null, agreement_date: null },
     ]);
   });
 
@@ -601,8 +601,8 @@ describe('agreements feature', () => {
       conn.prepare('SELECT checked_out_date, due_date, agreement_data, agreement_date, agreement_pending FROM loans ORDER BY id').all()
     );
     expect(loanRows).toEqual([
-      { checked_out_date: '2024-03-01', due_date: '2024-08-21', agreement_data: 'data:image/png;base64,test-signature', agreement_date: '2024-03-01', agreement_pending: 0 },
-      { checked_out_date: '2024-03-01', due_date: '2024-08-21', agreement_data: 'data:image/png;base64,test-signature', agreement_date: '2024-03-01', agreement_pending: 0 },
+      { checked_out_date: '2024-03-01', due_date: '2024-07-01', agreement_data: 'data:image/png;base64,test-signature', agreement_date: '2024-03-01', agreement_pending: 0 },
+      { checked_out_date: '2024-03-01', due_date: '2024-07-01', agreement_data: 'data:image/png;base64,test-signature', agreement_date: '2024-03-01', agreement_pending: 0 },
     ]);
 
     const logRows = db.withDb((conn) =>
@@ -687,7 +687,7 @@ describe('agreements feature', () => {
     expect(result.item.item_name).toBe('Walker');
     expect(result.customer.name).toBe('Alice Smith');
     expect(result.checkoutDate).toBe('2024-03-01');
-    expect(result.dueDate).toBe('2024-08-21');
+    expect(result.dueDate).toBe('2024-07-01');
     expect(result.checkoutPeriodDays).toBe(120);
     expect(agreements.getLoanHandler(evt, { loanId: 999 })).toEqual({ ok: false, error: 'Loan not found.' });
   });

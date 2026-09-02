@@ -143,7 +143,8 @@
       ' data-customer-name="' + esc(item.customer_name || '') + '"' +
       ' data-customer-phone="' + esc(item.customer_phone || '') + '"' +
       ' data-checked-out-date="' + esc(item.checked_out_date || '') + '"' +
-      ' data-due-date="' + esc(item.due_date || '') + '">' +
+      ' data-due-date="' + esc(item.due_date || '') + '"' +
+      ' data-loan-id="' + esc(item.loan_id == null ? '' : item.loan_id) + '">' +
       '<td class="col-actions">' + actionHtml + '</td>' +
       '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="equipment_id">' + esc(item.equipment_id) + '</td>' +
       '<td contenteditable="true" data-table="equipment" data-row-id="' + esc(item.equipment_id) + '" data-field="item_name">' + esc(item.item_name) + '</td>' +
@@ -156,6 +157,7 @@
   }
 
   function renderTable() {
+    var scrollY = window.scrollY;
     var tbody = module.container.querySelector('#master-tbody');
     if (!module.rows.length) {
       tbody.innerHTML = '<tr><td colspan="8">No equipment registered yet.</td></tr>';
@@ -164,6 +166,7 @@
     }
     var noResults = module.container.querySelector('#master-no-results');
     if (noResults) noResults.hidden = true;
+    window.scrollTo(0, scrollY);
   }
 
   function applyFilters() {
@@ -301,10 +304,24 @@
     window.dme.loansExtend(Number(loanId)).then(function (res) {
       if (res && res.ok) {
         App.flash(res.message || 'Return date extended.', 'success');
+        var row = module.container.querySelector('.master-row[data-loan-id="' + loanId + '"]');
+        if (row) {
+          row.setAttribute('data-due-date', res.dueDate);
+          row.setAttribute('data-status', 'checked_out');
+          row.classList.remove('overdue-row');
+          var cell = row.querySelector('td[data-table="loans"][data-field="due_date"]');
+          if (cell) cell.textContent = res.dueDate;
+          if (module.sortBy === 'dueDate' || module.activeTab === 'overdue') {
+            applySort();
+            applyFilters();
+          }
+        } else {
+          loadAndRender();
+        }
       } else {
         App.flash((res && res.error) || 'Failed to extend return date.', 'error');
+        loadAndRender();
       }
-      loadAndRender();
     });
   }
 

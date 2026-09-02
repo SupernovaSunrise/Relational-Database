@@ -46,6 +46,7 @@
 
   function loadAndRender() {
     var token = module.renderToken;
+    var scrollY = window.scrollY;
     var tbody = module.container.querySelector('#master-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="loading">Loading equipment data...</td></tr>';
     var noResults = module.container.querySelector('#master-no-results');
@@ -53,6 +54,7 @@
     updateCheckoutBtn();
     return loadData().then(function (ok) {
       if (ok && token === module.renderToken) render();
+      window.scrollTo(0, scrollY);
     });
   }
 

@@ -36,6 +36,63 @@
     });
   }
 
+  function syncRowData(row, item) {
+    row.setAttribute('data-equipment-id', item.equipment_id || '');
+    row.setAttribute('data-item-name', item.item_name || '');
+    row.setAttribute('data-customer-name', item.customer_name || '');
+    row.setAttribute('data-customer-phone', item.customer_phone || '');
+    row.setAttribute('data-checked-out-date', item.checked_out_date || '');
+    row.setAttribute('data-due-date', item.due_date || '');
+    row.setAttribute('data-search-text', (
+      (item.equipment_id || '') + ' ' +
+      (item.item_name || '') + ' ' +
+      (item.customer_name || '') + ' ' +
+      (item.customer_phone || '') + ' ' +
+      App.normalizePhone(item.customer_phone || '')
+    ).toLowerCase());
+    var status = getStatus(item);
+    row.setAttribute('data-status', status);
+    if (status === 'overdue') row.classList.add('overdue-row');
+    else row.classList.remove('overdue-row');
+  }
+
+  function patchRowAfterEdit(table, field, rowId, value, cell) {
+    if (!module.container) { loadAndRender(); return; }
+    var items = [];
+    if (table === 'equipment') {
+      module.rows.forEach(function (r) { if (r.equipment_id === rowId) items.push(r); });
+    } else if (table === 'customers') {
+      module.rows.forEach(function (r) { if (r.customer_id == rowId) items.push(r); });
+    } else if (table === 'loans') {
+      module.rows.forEach(function (r) { if (r.loan_id == rowId) items.push(r); });
+    }
+    if (!items.length) { loadAndRender(); return; }
+    items.forEach(function (item) {
+      if (table === 'customers') {
+        var customerRow = module.container.querySelector('.master-row[data-customer-name="' + item.customer_name + '"]');
+        if (field === 'name') item.customer_name = value;
+        else if (field === 'phone') item.customer_phone = value;
+        if (customerRow) syncRowData(customerRow, item);
+      } else if (table === 'equipment') {
+        if (field === 'equipment_id') item.equipment_id = value;
+        else if (field === 'item_name') item.item_name = value;
+      } else if (table === 'loans') {
+        if (field === 'checked_out_date') item.checked_out_date = value;
+        else if (field === 'due_date') item.due_date = value;
+      }
+    });
+    var row = cell.closest('tr.master-row');
+    if (!row) { loadAndRender(); return; }
+    if (table === 'equipment' && field === 'equipment_id') {
+      var equipmentCells = row.querySelectorAll('td[data-table="equipment"]');
+      Array.prototype.forEach.call(equipmentCells, function (c) { c.setAttribute('data-row-id', value); });
+    }
+    if (table !== 'customers') syncRowData(row, items[0]);
+    applySort();
+    applyFilters();
+    updateCheckoutBtn();
+  }
+
   function updateCheckoutBtn() {
     if (!module.container) return;
     var btn = module.container.querySelector('#checkout-btn');
@@ -568,8 +625,8 @@
         updateCheckoutBtn();
       }
     });
-    App.initInlineEditing(container, function () {
-      loadAndRender();
+    App.initInlineEditing(container, function (table, field, rowId, value, cell) {
+      patchRowAfterEdit(table, field, rowId, value, cell);
     });
 
     App.setTeardown(function () {

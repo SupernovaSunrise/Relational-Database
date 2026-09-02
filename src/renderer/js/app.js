@@ -190,7 +190,7 @@
       }
       promise.then(function (res) {
         if (res && res.ok) {
-          if (onSave) onSave();
+          if (onSave) onSave(table, field, rowId, value, cell);
         } else {
           cell.textContent = original;
           flash((res && res.error) || 'Update failed.', 'error');

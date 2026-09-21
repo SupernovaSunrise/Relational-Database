@@ -123,6 +123,7 @@
   }
 
   function renderCandidates() {
+    if (!module.container) return;
     var section = module.container.querySelector('#candidate-section');
     if (!section) return;
     if (!module.candidates || !module.candidates.length) {
@@ -151,6 +152,7 @@
   }
 
   function renderTabs() {
+    if (!module.container) return;
     var counts = { all: 0, checked_out: 0, available: 0, overdue: 0 };
     module.rows.forEach(function (r) {
       counts.all++;
@@ -204,6 +206,7 @@
     return '<tr class="master-row' + (status === 'overdue' ? ' overdue-row' : '') + '"' +
       ' data-status="' + status + '"' +
       ' data-search-text="' + esc(searchText) + '"' +
+      ' data-customer-id="' + (item.customer_id == null ? '' : esc(item.customer_id)) + '"' +
       ' data-equipment-id="' + esc(item.equipment_id || '') + '"' +
       ' data-item-name="' + esc(item.item_name || '') + '"' +
       ' data-customer-name="' + esc(item.customer_name || '') + '"' +
@@ -236,6 +239,7 @@
   }
 
   function applyFilters() {
+    if (!module.container) return;
     var query = module.search.toLowerCase().trim();
     var visible = 0;
     var rows = module.container.querySelectorAll('.master-row');
@@ -268,6 +272,7 @@
   }
 
   function applySort() {
+    if (!module.container) return;
     var tbody = module.container.querySelector('#master-tbody');
     var rows = Array.prototype.slice.call(tbody.querySelectorAll('.master-row'));
     var dir = module.sortDir === 'asc' ? 1 : -1;
@@ -585,6 +590,7 @@
         rafPending = true;
         requestAnimationFrame(function () {
           rafPending = false;
+          if (!module.container) return;
           module.search = searchInput.value;
           applyFilters();
         });

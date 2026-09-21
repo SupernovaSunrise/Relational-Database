@@ -164,7 +164,6 @@ describe('validatePayload', () => {
       checkoutDate: '2024-01-01',
       agreementDate: '2024-01-01',
       waiverAgreed: true,
-      signatureAgreed: true,
       signatureData: 'data:image/png;base64,x',
     };
     expect(ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, base)).toBe(true);
@@ -172,10 +171,19 @@ describe('validatePayload', () => {
       ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, returnBy: '2024-05-01' })
     ).toBe(true);
     expect(
+      ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, signatureData: '' })
+    ).toBe(true);
+    expect(
+      ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, witnessName: 'Staff Jane' })
+    ).toBe(true);
+    expect(
+      ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, witnessName: 'x'.repeat(300) })
+    ).toBe(false);
+    expect(
       ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, waiverAgreed: 1 })
     ).toBe(false);
     expect(
-      ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, signatureAgreed: 'true' })
+      ipc.validatePayload(CHANNELS.AGREEMENTS_SUBMIT, { ...base, signatureData: 42 })
     ).toBe(false);
   });
 
@@ -203,7 +211,6 @@ describe('validatePayload', () => {
       checkoutDate: '2024-01-01',
       agreementDate: '2024-01-01',
       waiverAgreed: true,
-      signatureAgreed: true,
       signatureData: 'x'.repeat(MAX_PAYLOAD_BYTES + 1),
     };
     expect(JSON.stringify(oversized).length).toBeGreaterThan(MAX_PAYLOAD_BYTES);

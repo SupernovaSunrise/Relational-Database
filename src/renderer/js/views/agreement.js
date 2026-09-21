@@ -8,6 +8,43 @@
   var activePendingCancel = null;
   var activeFinalized = false;
 
+  function buildAgreementPrintHtml(opts) {
+    var esc = App.escapeHtml;
+    var customer = opts.customer || {};
+    var items = opts.items || [];
+    var dateText = opts.agreementDate || '';
+    var itemRows = items.map(function (item) {
+      return '<tr>' +
+        '<td>' + esc(item.equipment_id) + (item.item_name ? ' - ' + esc(item.item_name) : '') + '</td>' +
+        '<td>' + esc(item.due_date || '') + '</td>' +
+      '</tr>';
+    }).join('');
+    var sigHtml = opts.signatureSrc
+      ? '<img class="sig-img" src="' + esc(opts.signatureSrc) + '" alt="Customer signature">'
+      : '<p>No signature on file.</p>';
+    var witnessHtml = opts.witnessName
+      ? '<p><strong>Witnessed By:</strong> ' + esc(opts.witnessName) + '</p>'
+      : '';
+    return '<div class="card" id="agreement-card"><div class="card-body">' +
+      '<h2>Customer Agreement</h2>' +
+      '<p><strong>Customer:</strong> ' + esc(customer.name || '') + (customer.phone ? ' (' + esc(customer.phone) + ')' : '') + '</p>' +
+      '<p><strong>Phone:</strong> ' + esc(customer.phone || '') + '</p>' +
+      '<p><strong>Zip:</strong> ' + esc(customer.zip_code || '') + '</p>' +
+      '<p><strong>Agreement Date:</strong> ' + esc(dateText) + '</p>' +
+      '<h4>Equipment on This Agreement</h4>' +
+      '<table class="equip-table">' +
+        '<thead><tr><th>Equipment</th><th>Return By</th></tr></thead>' +
+        '<tbody>' + itemRows + '</tbody>' +
+      '</table>' +
+      '<h4>General Terms of Use and Loan Agreement</h4>' +
+      '<div class="terms-text">' + TERMS + '</div>' +
+      '<div class="sig-section">' +
+        '<h4>Digital Signature</h4>' + sigHtml +
+      '</div>' +
+      witnessHtml +
+    '</div></div>';
+  }
+
   function cancelActivePending() {
     if (!activeFinalized && activePendingCancel) {
       var ids = activePendingCancel;
@@ -158,17 +195,14 @@
             '<input class="form-check-input" type="checkbox" id="waiver_agreed">' +
             '<label class="form-check-label" for="waiver_agreed">I agree to the General Terms of Use and Loan Agreement</label>' +
           '</div>' +
-          '<div class="form-check">' +
-            '<input class="form-check-input" type="checkbox" id="signature_agreed">' +
-            '<label class="form-check-label" for="signature_agreed">I acknowledge this digital signature</label>' +
-          '</div>' +
           '<div>' +
-            '<label>Signature:</label>' +
+            '<label>Signature (optional):</label>' +
             '<div class="sig-box">' +
               '<canvas id="sigCanvas" width="600" height="200" aria-label="Signature pad"></canvas>' +
             '</div>' +
-            '<div><button type="button" class="btn btn-secondary" id="sig-clear-btn">Clear</button></div>' +
+            '<div class="no-print"><button type="button" class="btn btn-secondary" id="sig-clear-btn">Clear</button></div>' +
           '</div>' +
+          '<p class="no-print"><strong>Witnessed By:</strong> <input class="customer-info-field" type="text" id="witness_name" maxlength="255" placeholder="Staff name (optional)" autocomplete="off"></p>' +
           '<div class="agreement-actions no-print">' +
             '<button type="submit" class="btn">Save Agreement</button>' +
             '<button type="button" class="btn btn-secondary" id="agreement-cancel-btn">Cancel</button>' +
@@ -181,6 +215,7 @@
       var checkoutInput = cardBody.querySelector('#checkout_date');
       var returnByInput = cardBody.querySelector('#return_by');
       var returnByHint = cardBody.querySelector('#return_by_hint');
+      var witnessInput = cardBody.querySelector('#witness_name');
 
       function updateReturnByDate() {
         if (!checkoutInput || !returnByInput) return;
@@ -217,7 +252,13 @@
       });
 
       cardBody.querySelector('#agreement-print-btn').addEventListener('click', function () {
-        App.print(cardBody.innerHTML);
+        App.print(buildAgreementPrintHtml({
+          customer: customer,
+          agreementDate: App.todayIso(),
+          items: items,
+          signatureSrc: pad.hasSignature() ? pad.toDataURL() : '',
+          witnessName: witnessInput ? witnessInput.value.trim() : '',
+        }));
       });
 
       cardBody.querySelector('#agreement-cancel-btn').addEventListener('click', function () {
@@ -231,13 +272,8 @@
       cardBody.querySelector('#agreement-form').addEventListener('submit', function (e) {
         e.preventDefault();
         var waiverAgreed = cardBody.querySelector('#waiver_agreed').checked;
-        var signatureAgreed = cardBody.querySelector('#signature_agreed').checked;
-        if (!waiverAgreed || !signatureAgreed) {
-          App.flash('You must agree to both the waiver and digital signature acknowledgement.', 'error');
-          return;
-        }
-        if (!pad.hasSignature()) {
-          App.flash('Please provide a digital signature.', 'error');
+        if (!waiverAgreed) {
+          App.flash('You must agree to the General Terms of Use and Loan Agreement.', 'error');
           return;
         }
         var checkoutDate = formatDateInput(checkoutInput) || App.todayIso();
@@ -253,8 +289,8 @@
           returnBy: returnBy,
           agreementDate: App.todayIso(),
           waiverAgreed: waiverAgreed,
-          signatureAgreed: signatureAgreed,
-          signatureData: pad.toDataURL(),
+          witnessName: witnessInput ? witnessInput.value.trim() : '',
+          signatureData: pad.hasSignature() ? pad.toDataURL() : '',
         };
         window.dme.agreementsSubmit(payload).then(function (res) {
           if (res && res.ok) {
@@ -281,7 +317,7 @@
     activeFinalized = true;
 
     container.innerHTML =
-      '<h2>Signed Customer Agreement</h2>' +
+      '<h2>Customer Agreement</h2>' +
       '<div class="card" id="agreement-card"><div class="card-body"><p class="loading">Loading agreement...</p></div></div>';
 
     var cardBody = container.querySelector('.card-body');
@@ -289,7 +325,7 @@
     window.dme.agreementsGetCustomer(customerId).then(function (res) {
       if (!container) return;
       if (!res || !res.ok) {
-        App.flash((res && res.error) || 'No signed active agreement found for this customer.', 'error');
+        App.flash((res && res.error) || 'No active agreement found for this customer.', 'error');
         App.navigate('master');
         return;
       }
@@ -317,8 +353,9 @@
           '<h4>Digital Signature</h4>' +
           (res.signatureData
             ? '<img class="sig-img" src="' + esc(res.signatureData) + '" alt="Customer signature">'
-            : '<p>No signature saved.</p>') +
+            : '<p>No signature on file.</p>') +
         '</div>' +
+        (res.witnessName ? '<p><strong>Witnessed By:</strong> ' + esc(res.witnessName) + '</p>' : '') +
         '<div class="agreement-actions no-print">' +
           '<button type="button" class="btn" id="agreement-print-btn">Print</button>' +
           '<a class="btn" href="#/master">Back to Home</a>' +
@@ -327,7 +364,13 @@
       var printBtn = cardBody.querySelector('#agreement-print-btn');
       if (printBtn) {
         printBtn.addEventListener('click', function () {
-          App.print(cardBody.innerHTML);
+          App.print(buildAgreementPrintHtml({
+            customer: res.customer,
+            agreementDate: res.agreementDate,
+            items: res.items,
+            signatureSrc: res.signatureData || '',
+            witnessName: res.witnessName || '',
+          }));
         });
       }
     });

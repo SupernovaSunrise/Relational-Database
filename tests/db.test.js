@@ -68,6 +68,7 @@ const EXPECTED_TABLES = {
     { name: 'digital_signature_agreed', type: 'INTEGER', notnull: 0, dflt_value: '0', pk: 0 },
     { name: 'signature_data', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
     { name: 'agreed_date', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+    { name: 'witness_name', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
   ],
   deleted_items_log: [
     { name: 'id', type: 'INTEGER', notnull: 0, dflt_value: null, pk: 1 },
@@ -369,6 +370,16 @@ describe('initDb on a legacy database with an old schema', () => {
         'item_name',
         'deletion_date',
         'sale_price',
+      ]);
+      expect(tableColumnNames(conn, 'customer_agreements')).toEqual([
+        'id',
+        'customer_id',
+        'loan_id',
+        'waiver_agreed',
+        'digital_signature_agreed',
+        'signature_data',
+        'agreed_date',
+        'witness_name',
       ]);
       expect(indexNames(conn)).toEqual(EXPECTED_INDEXES);
 

@@ -67,17 +67,19 @@
         console.error('View teardown error:', err);
       }
     }
-    var view = window.AppViews && window.AppViews[name];
     viewContainer.innerHTML = '';
+    var view = window.AppViews && window.AppViews[name];
     if (!view) {
       viewContainer.innerHTML = '<p>Unknown view.</p>';
       return;
     }
+    var wrapper = document.createElement('div');
+    viewContainer.appendChild(wrapper);
     try {
-      view.init(viewContainer, params || {});
+      view.init(wrapper, params || {});
     } catch (err) {
       console.error('View render error:', err);
-      viewContainer.innerHTML = '<p>Failed to render view.</p>';
+      wrapper.innerHTML = '<p>Failed to render view.</p>';
     }
   }
 

@@ -624,7 +624,7 @@ tr.overdue-row td:first-child {
     size: Letter;
     margin: 0.5in;
   }
-  nav, .no-print, .report-filters, .print-button, .tab-bar, .alert, .checkout-bar, .filter-row, .form-grid {
+  nav, .no-print, .report-filters, .print-button, .tab-bar, .alert, .checkout-bar, .filter-row, .form-grid, #sig-clear-btn {
     display: none !important;
   }
   body {

@@ -42,13 +42,14 @@ function getCustomerHandler(event, payload) {
         'SELECT loans.id, loans.equipment_id, COALESCE(equipment.item_name, loans.item_name) AS item_name, ' +
         'loans.checked_out_date, loans.due_date, loans.agreement_date, loans.agreement_data ' +
         'FROM loans LEFT JOIN equipment ON loans.equipment_id = equipment.equipment_id ' +
-        'WHERE loans.customer_id = ? AND loans.returned_date IS NULL AND loans.agreement_data IS NOT NULL ' +
+        'WHERE loans.customer_id = ? AND loans.returned_date IS NULL AND loans.agreement_pending = 0 ' +
+        'AND (loans.agreement_data IS NOT NULL OR loans.agreement_date IS NOT NULL) ' +
         'ORDER BY loans.checked_out_date, loans.id'
       )
       .all(payload.customerId)
       .map((row) => ({ ...row }));
     if (!rows.length) {
-      return { ok: false, error: 'No signed active agreement found for this customer.' };
+      return { ok: false, error: 'No active agreement found for this customer.' };
     }
     let latest = rows[0];
     for (const row of rows) {
@@ -56,26 +57,28 @@ function getCustomerHandler(event, payload) {
       const latestKey = (latest.agreement_date || '') + '|' + latest.id;
       if (rowKey > latestKey) latest = row;
     }
+    const witnessRow = conn
+      .prepare('SELECT witness_name FROM customer_agreements WHERE loan_id = ?')
+      .get(latest.id);
     return {
       ok: true,
       customer: { ...customer },
       items: rows,
       signatureData: latest.agreement_data,
       agreementDate: latest.agreement_date,
+      witnessName: (witnessRow && witnessRow.witness_name) || '',
     };
   });
 }
 
 function submitHandler(event, payload) {
   const waiverAgreed = !!payload.waiverAgreed;
-  const signatureAgreed = !!payload.signatureAgreed;
-  const signatureData = payload.signatureData;
-  if (!waiverAgreed || !signatureAgreed) {
-    return { ok: false, error: 'You must agree to both the waiver and digital signature acknowledgement.' };
+  if (!waiverAgreed) {
+    return { ok: false, error: 'You must agree to the General Terms of Use and Loan Agreement.' };
   }
-  if (!signatureData) {
-    return { ok: false, error: 'Please provide a digital signature.' };
-  }
+  const signatureData = payload.signatureData || '';
+  const witnessName = (payload.witnessName || '').trim();
+  const storedSignature = signatureData || null;
   const checkoutDate = normalizeDateInput(payload.checkoutDate) || todayIso();
   let dueDate = calculateDueDate(checkoutDate);
   if (!dueDate) dueDate = todayIso();
@@ -93,7 +96,7 @@ function submitHandler(event, payload) {
     try {
       const updatedLoans = [];
       for (const loanId of loanIds) {
-        const result = updateLoan.run(checkoutDate, dueDate, signatureData, agreementDate, loanId, payload.customerId);
+        const result = updateLoan.run(checkoutDate, dueDate, storedSignature, agreementDate, loanId, payload.customerId);
         if (result.changes > 0) updatedLoans.push(loanId);
       }
       if (updatedLoans.length) {
@@ -122,15 +125,16 @@ function submitHandler(event, payload) {
         });
         conn
           .prepare(
-            'INSERT INTO customer_agreements (customer_id, loan_id, waiver_agreed, digital_signature_agreed, signature_data, agreed_date) VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO customer_agreements (customer_id, loan_id, waiver_agreed, digital_signature_agreed, signature_data, agreed_date, witness_name) VALUES (?, ?, ?, ?, ?, ?, ?)'
           )
           .run(
             payload.customerId,
             updatedLoans[0],
             waiverAgreed ? 1 : 0,
-            signatureAgreed ? 1 : 0,
-            signatureData,
-            todayIso()
+            signatureData ? 1 : 0,
+            storedSignature,
+            todayIso(),
+            witnessName || null
           );
       }
       conn.exec('COMMIT');

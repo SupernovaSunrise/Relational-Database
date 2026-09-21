@@ -7,7 +7,8 @@ function getMasterDataHandler(event, payload) {
       .prepare(
         'SELECT equipment.equipment_id, equipment.item_name, customers.id AS customer_id, ' +
         'customers.name AS customer_name, customers.phone AS customer_phone, loans.id AS loan_id, ' +
-        'loans.checked_out_date, loans.due_date, loans.agreement_data ' +
+        'loans.checked_out_date, loans.due_date, loans.agreement_date, ' +
+        'CASE WHEN loans.id IS NULL THEN 0 WHEN loans.agreement_pending = 0 AND (loans.agreement_data IS NOT NULL OR loans.agreement_date IS NOT NULL) THEN 1 ELSE 0 END AS has_agreement ' +
         'FROM equipment ' +
         'LEFT JOIN loans ON equipment.equipment_id = loans.equipment_id AND loans.returned_date IS NULL AND loans.agreement_pending = 0 ' +
         'LEFT JOIN customers ON loans.customer_id = customers.id ' +

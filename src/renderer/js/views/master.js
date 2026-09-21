@@ -57,7 +57,7 @@
   }
 
   function patchRowAfterEdit(table, field, rowId, value, cell) {
-    if (!module.container) { loadAndRender(); return; }
+    if (!module.container) return;
     var items = [];
     if (table === 'equipment') {
       module.rows.forEach(function (r) { if (r.equipment_id === rowId) items.push(r); });
@@ -69,7 +69,14 @@
     if (!items.length) { loadAndRender(); return; }
     items.forEach(function (item) {
       if (table === 'customers') {
-        var customerRow = module.container.querySelector('.master-row[data-customer-name="' + item.customer_name + '"]');
+        var customerRow = null;
+        var masterRows = module.container.querySelectorAll('.master-row');
+        for (var r = 0; r < masterRows.length; r++) {
+          if (masterRows[r].getAttribute('data-customer-name') === item.customer_name) {
+            customerRow = masterRows[r];
+            break;
+          }
+        }
         if (field === 'name') item.customer_name = value;
         else if (field === 'phone') item.customer_phone = value;
         if (customerRow) syncRowData(customerRow, item);
@@ -172,7 +179,7 @@
       actionHtml = '<label class="checkbox-label"><input type="checkbox" data-action="checkout-pick" data-equipment-id="' + esc(item.equipment_id) + '" value="' + esc(item.equipment_id) + '"><span>Select</span></label>';
     } else {
       actionHtml = '';
-      if (item.agreement_data) {
+      if (item.has_agreement) {
         actionHtml += '<button type="button" class="btn" data-action="view-agreement" data-customer-id="' + item.customer_id + '">View Agreement</button> ';
       }
       actionHtml += '<button type="button" class="btn btn-danger" data-action="return" data-loan-id="' + item.loan_id + '">Return</button>';

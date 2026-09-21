@@ -147,6 +147,7 @@ function initDb(dbPath) {
         digital_signature_agreed INTEGER DEFAULT 0,
         signature_data TEXT,
         agreed_date TEXT NOT NULL,
+        witness_name TEXT,
         FOREIGN KEY(customer_id) REFERENCES customers(id),
         FOREIGN KEY(loan_id) REFERENCES loans(id)
       );
@@ -202,6 +203,10 @@ function initDb(dbPath) {
     const deletedLogColumns = tableColumns(conn, 'deleted_items_log');
     if (!deletedLogColumns.includes('sale_price')) {
       conn.exec('ALTER TABLE deleted_items_log ADD COLUMN sale_price TEXT');
+    }
+    const agreementColumns = tableColumns(conn, 'customer_agreements');
+    if (!agreementColumns.includes('witness_name')) {
+      conn.exec('ALTER TABLE customer_agreements ADD COLUMN witness_name TEXT');
     }
     const updatePhone = conn.prepare('UPDATE customers SET phone = ? WHERE id = ?');
     for (const row of conn.prepare('SELECT id, phone FROM customers').all()) {

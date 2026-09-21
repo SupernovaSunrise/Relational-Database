@@ -64,7 +64,7 @@ npm run dist:portable   # portable only
 
 ### Build (CI)
 Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
-1. `npm ci` + jest (all 159 tests)
+1. `npm ci` + jest (all 163 tests)
 2. `npm run dist` (unsigned unless signing secrets are present)
 3. Generates `SHA256 checksums.txt`
 4. Uploads artifacts (installer, portable, checksums)
@@ -104,7 +104,7 @@ Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
 
 ## Testing
 
-Jest suites in `tests/` (`*.test.js`), 159 tests / 5 suites:
+Jest suites in `tests/` (`*.test.js`), 163 tests / 5 suites:
 - `business-logic.test.js` — 990-case parity fixture (2020–2040 holidays/due dates), phones, dates, escape
 - `auth.test.js` — werkzeug 2.3.7 pbkdf2 + 3.1.3 scrypt hash vectors, register/login/rate-limit/session/change-password
 - `ipc-contract.test.js` — payload validation fail-closed, sender gate, REQUIRED_AUTH/ADMIN invariants, full handler pipeline

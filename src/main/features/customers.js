@@ -21,7 +21,8 @@ function listHandler(event, payload) {
     const baseQuery =
       'SELECT customers.id, customers.name, customers.phone, customers.zip_code, customers.date_added, ' +
       'EXISTS(SELECT 1 FROM loans WHERE loans.customer_id = customers.id ' +
-      'AND loans.returned_date IS NULL AND loans.agreement_data IS NOT NULL) AS has_agreement ' +
+      'AND loans.returned_date IS NULL AND loans.agreement_pending = 0 ' +
+      'AND (loans.agreement_data IS NOT NULL OR loans.agreement_date IS NOT NULL)) AS has_agreement ' +
       'FROM customers ';
     let query = baseQuery;
     const params = [];

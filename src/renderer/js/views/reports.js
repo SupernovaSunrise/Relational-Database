@@ -279,6 +279,10 @@
 
     container.addEventListener('click', onContainerClick);
 
+    App.setTeardown(function () {
+      container = null;
+    });
+
     window.dme.reportsGetYears().then(function (res) {
       if (!container || token !== renderToken) return;
       if (res && res.ok) renderYears(res.years || []);

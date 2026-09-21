@@ -42,7 +42,6 @@ function checkoutAndAgree(customerId, equipmentIds, checkoutDate, agreementDate)
     checkoutDate,
     agreementDate,
     waiverAgreed: true,
-    signatureAgreed: true,
     signatureData: 'data:image/png;base64,test-signature',
   });
   expect(submit.ok).toBe(true);
@@ -554,7 +553,7 @@ describe('agreements feature', () => {
     cleanupDir(temp.dir);
   });
 
-  test('submitHandler requires waiver, signature agreement, and signature data', () => {
+  test('submitHandler requires the waiver but not a signature', () => {
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
     seedEquipment('AA-0001', 'Walker');
     const base = {
@@ -563,16 +562,47 @@ describe('agreements feature', () => {
       checkoutDate: '2024-03-01',
       agreementDate: '2024-03-01',
       waiverAgreed: false,
-      signatureAgreed: false,
-      signatureData: '',
     };
     expect(agreements.submitHandler(evt, base)).toEqual({
       ok: false,
-      error: 'You must agree to both the waiver and digital signature acknowledgement.',
+      error: 'You must agree to the General Terms of Use and Loan Agreement.',
     });
-    expect(
-      agreements.submitHandler(evt, { ...base, waiverAgreed: true, signatureAgreed: true })
-    ).toEqual({ ok: false, error: 'Please provide a digital signature.' });
+    expect(agreements.submitHandler(evt, { ...base, waiverAgreed: true }).ok).toBe(true);
+  });
+
+  test('submitHandler accepts an agreement with no signature and records the witness', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    const checkout = loans.checkoutHandler(evt, {
+      customerId,
+      equipmentIds: ['AA-0001'],
+      checkoutDate: '2024-03-01',
+    });
+    const submit = agreements.submitHandler(evt, {
+      customerId,
+      loanIds: checkout.loanIds,
+      checkoutDate: '2024-03-01',
+      agreementDate: '2024-03-01',
+      waiverAgreed: true,
+      signatureData: '',
+      witnessName: 'Staff Joe',
+    });
+    expect(submit.ok).toBe(true);
+    const loanRow = db.withDb((conn) =>
+      conn.prepare('SELECT agreement_data, agreement_date, agreement_pending FROM loans WHERE id = 1').get()
+    );
+    expect(loanRow).toEqual({ agreement_data: null, agreement_date: '2024-03-01', agreement_pending: 0 });
+    const agreementRow = db.withDb((conn) =>
+      conn
+        .prepare('SELECT waiver_agreed, digital_signature_agreed, signature_data, witness_name FROM customer_agreements')
+        .get()
+    );
+    expect(agreementRow).toEqual({
+      waiver_agreed: 1,
+      digital_signature_agreed: 0,
+      signature_data: null,
+      witness_name: 'Staff Joe',
+    });
   });
 
   test('submitHandler finalizes pending loans and writes checkout_log and customer_agreements', () => {
@@ -590,7 +620,6 @@ describe('agreements feature', () => {
       checkoutDate: '2024-03-01',
       agreementDate: '03/01/2024',
       waiverAgreed: true,
-      signatureAgreed: true,
       signatureData: 'data:image/png;base64,test-signature',
     });
     expect(submit.ok).toBe(true);
@@ -645,7 +674,6 @@ describe('agreements feature', () => {
       returnBy: '2025-01-15',
       agreementDate: '2024-03-01',
       waiverAgreed: true,
-      signatureAgreed: true,
       signatureData: 'data:image/png;base64,test-signature',
     });
     expect(submit.ok).toBe(true);
@@ -664,7 +692,6 @@ describe('agreements feature', () => {
       checkoutDate: '2024-03-01',
       agreementDate: '2024-03-02',
       waiverAgreed: true,
-      signatureAgreed: true,
       signatureData: 'data:image/png;base64,second',
     });
     expect(submit.ok).toBe(true);
@@ -692,12 +719,12 @@ describe('agreements feature', () => {
     expect(agreements.getLoanHandler(evt, { loanId: 999 })).toEqual({ ok: false, error: 'Loan not found.' });
   });
 
-  test('getCustomerHandler requires a signed active agreement', () => {
+  test('getCustomerHandler requires an active agreement', () => {
     seedEquipment('AA-0001', 'Walker');
     const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
     expect(agreements.getCustomerHandler(evt, { customerId })).toEqual({
       ok: false,
-      error: 'No signed active agreement found for this customer.',
+      error: 'No active agreement found for this customer.',
     });
     checkoutAndAgree(customerId, ['AA-0001'], '2024-03-01', '2024-03-01');
     const result = agreements.getCustomerHandler(evt, { customerId });
@@ -706,6 +733,26 @@ describe('agreements feature', () => {
     expect(result.items).toHaveLength(1);
     expect(result.signatureData).toBe('data:image/png;base64,test-signature');
     expect(result.agreementDate).toBe('2024-03-01');
+    expect(result.witnessName).toBe('');
+  });
+
+  test('getCustomerHandler returns agreements recorded without a signature', () => {
+    seedEquipment('AA-0001', 'Walker');
+    const customerId = seedCustomer('Alice Smith', '(406) 555-1234', '59901');
+    const checkout = loans.checkoutHandler(evt, { customerId, equipmentIds: ['AA-0001'], checkoutDate: '2024-03-01' });
+    const submit = agreements.submitHandler(evt, {
+      customerId,
+      loanIds: checkout.loanIds,
+      checkoutDate: '2024-03-01',
+      agreementDate: '2024-03-01',
+      waiverAgreed: true,
+      witnessName: 'Staff Jane',
+    });
+    expect(submit.ok).toBe(true);
+    const result = agreements.getCustomerHandler(evt, { customerId });
+    expect(result.ok).toBe(true);
+    expect(result.signatureData).toBeNull();
+    expect(result.witnessName).toBe('Staff Jane');
   });
 });
 

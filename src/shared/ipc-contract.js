@@ -77,8 +77,8 @@ const PAYLOADS = Object.freeze({
     returnBy: 'string:32?',
     agreementDate: 'string:32',
     waiverAgreed: 'boolean',
-    signatureAgreed: 'boolean',
-    signatureData: 'string:900000',
+    witnessName: 'string:255?',
+    signatureData: 'string:900000?',
   },
   [CHANNELS.REPORTS_GET_YEARS]: {},
   [CHANNELS.REPORTS_GET_DATA]: {

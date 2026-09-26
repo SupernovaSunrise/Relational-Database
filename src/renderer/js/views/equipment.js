@@ -179,14 +179,16 @@
       openSellModal(btn.getAttribute('data-equipment-id'));
     } else if (action === 'delete-equipment') {
       var equipmentId = btn.getAttribute('data-equipment-id');
-      if (!window.confirm('Delete equipment ' + equipmentId + '?')) return;
-      window.dme.equipmentDelete(equipmentId).then(function (res) {
-        if (res && res.ok) {
-          App.flash(res.message || 'Equipment deleted successfully.', 'success');
-        } else {
-          App.flash((res && res.error) || 'Error deleting equipment.', 'error');
-        }
-        load();
+      App.confirm('Delete equipment ' + equipmentId + '?').then(function (confirmed) {
+        if (!confirmed) return;
+        window.dme.equipmentDelete(equipmentId).then(function (res) {
+          if (res && res.ok) {
+            App.flash(res.message || 'Equipment deleted successfully.', 'success');
+          } else {
+            App.flash((res && res.error) || 'Error deleting equipment.', 'error');
+          }
+          load();
+        });
       });
     }
   }

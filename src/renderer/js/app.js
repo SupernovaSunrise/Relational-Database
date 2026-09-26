@@ -239,6 +239,11 @@
     print: print,
     navigate: navigate,
     logout: logout,
+    confirm: function (message) {
+      return window.dme.appConfirm(message).then(function (res) {
+        return !!(res && res.ok && res.confirmed);
+      });
+    },
     initInlineEditing: initInlineEditing,
     setTeardown: function (fn) { currentTeardown = fn; },
   };

@@ -2,6 +2,7 @@ const CHANNELS = Object.freeze({
   APP_GET_STATUS: 'app:getStatus',
   APP_SHUTDOWN: 'app:shutdown',
   APP_PRINT: 'app:print',
+  APP_CONFIRM: 'app:confirm',
 
   AUTH_REGISTER: 'auth:register',
   AUTH_LOGIN: 'auth:login',
@@ -48,6 +49,7 @@ const PAYLOADS = Object.freeze({
   [CHANNELS.APP_GET_STATUS]: {},
   [CHANNELS.APP_SHUTDOWN]: {},
   [CHANNELS.APP_PRINT]: { html: 'string:524288' },
+  [CHANNELS.APP_CONFIRM]: { message: 'string:512' },
   [CHANNELS.AUTH_REGISTER]: { username: 'string:64', password: 'string:4096' },
   [CHANNELS.AUTH_LOGIN]: { username: 'string:64', password: 'string:4096' },
   [CHANNELS.AUTH_LOGOUT]: {},

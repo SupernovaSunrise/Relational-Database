@@ -110,14 +110,16 @@
     } else if (action === 'delete-customer') {
       var id = Number(btn.getAttribute('data-customer-id'));
       var name = btn.getAttribute('data-customer-name') || '';
-      if (!window.confirm('Delete customer ' + name + '?')) return;
-      window.dme.customersDelete(id).then(function (res) {
-        if (res && res.ok) {
-          App.flash(res.message || 'Customer deleted successfully.', 'success');
-        } else {
-          App.flash((res && res.error) || 'Error deleting customer.', 'error');
-        }
-        load();
+      App.confirm('Delete customer ' + name + '?').then(function (confirmed) {
+        if (!confirmed) return;
+        window.dme.customersDelete(id).then(function (res) {
+          if (res && res.ok) {
+            App.flash(res.message || 'Customer deleted successfully.', 'success');
+          } else {
+            App.flash((res && res.error) || 'Error deleting customer.', 'error');
+          }
+          load();
+        });
       });
     }
   }

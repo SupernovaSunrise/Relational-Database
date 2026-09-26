@@ -120,6 +120,25 @@ function registerIpcHandlers() {
 
   registerChannel(CHANNELS.APP_PRINT, print.printHandler);
 
+  registerChannel(CHANNELS.APP_CONFIRM, (event, payload) => {
+    const electron = require('electron');
+    const { BrowserWindow, dialog } = electron;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const message = payload && typeof payload.message === 'string' ? payload.message : '';
+    const options = {
+      type: 'question',
+      buttons: ['Yes', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Confirm',
+      message: message,
+      noLink: true,
+    };
+    const dialogPromise =
+      win && !win.isDestroyed() ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options);
+    return dialogPromise.then((result) => ({ ok: true, confirmed: result.response === 0 }));
+  });
+
   registerChannel(CHANNELS.AUTH_REGISTER, auth.registerHandler);
   registerChannel(CHANNELS.AUTH_LOGIN, auth.loginHandler);
   registerChannel(CHANNELS.AUTH_LOGOUT, auth.logoutHandler);

@@ -29,12 +29,16 @@ async function waitFor(fn, timeoutMs = 10000, step = 25) {
   return fn();
 }
 
-function makeDmeStub() {
+function makeDmeStub(calls) {
   const ok = (payload) => () => Promise.resolve(Object.assign({ ok: true }, payload || {}));
   return {
     appGetStatus: ok({ isFirstRun: false, user: { username: 'tester', isAdmin: 1 } }),
     appShutdown: ok(),
     appPrint: ok(),
+    appConfirm: (message) => {
+      calls.confirms.push(message);
+      return Promise.resolve({ ok: true, confirmed: true });
+    },
     authRegister: ok(),
     authLogin: ok(),
     authLogout: ok(),
@@ -71,8 +75,30 @@ function makeDmeStub() {
     agreementsGetCustomer: ok(),
     agreementsSubmit: ok(),
     reportsGetYears: ok({ years: ['2026', '2025', '2024'] }),
-    reportsGetData: ok({ reportTitle: 'Test Report', analyticsSummary: null, analyticsMonths: ['January'], dailyGuests: [], monthlyStats: [], reportData: [] }),
-    reportsDeleteCheckout: ok(),
+    reportsGetData: (payload) => {
+      const isCheckout = payload && payload.reportType === 'checkout';
+      return Promise.resolve({
+        ok: true,
+        reportTitle: 'Test Report',
+        analyticsSummary: null,
+        analyticsMonths: ['January'],
+        dailyGuests: [],
+        monthlyStats: [],
+        reportData: isCheckout
+          ? [{
+              id: 7,
+              checkout_date: '2026-09-01',
+              equipment_id: 'AA-0001',
+              item_name: 'Wheelchair',
+              customer_zip_code: '59901',
+            }]
+          : [],
+      });
+    },
+    reportsDeleteCheckout: (id) => {
+      calls.checkoutDeletes.push(id);
+      return Promise.resolve({ ok: true });
+    },
     reportsDeleteItemSale: ok(),
     importExportExportCustomers: ok(),
     importExportExportEquipment: ok(),
@@ -83,8 +109,9 @@ function makeDmeStub() {
   };
 }
 
-function bootRenderer() {
+function bootRenderer(overrides) {
   const pageErrors = [];
+  const calls = { confirms: [], nativeConfirms: 0, checkoutDeletes: [], itemSaleDeletes: [] };
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', (err) => {
     pageErrors.push(err);
@@ -96,8 +123,12 @@ function bootRenderer() {
     pretendToBeVisual: true,
     virtualConsole,
     beforeParse(window) {
-      window.dme = makeDmeStub();
-      window.confirm = () => true;
+      const base = makeDmeStub(calls);
+      window.dme = Object.assign(base, overrides || {});
+      window.confirm = () => {
+        calls.nativeConfirms += 1;
+        return true;
+      };
       window.scrollTo = () => {};
       if (window.HTMLElement) {
         window.HTMLElement.prototype.scrollIntoView = function scrollIntoView() {};
@@ -109,7 +140,7 @@ function bootRenderer() {
     },
   });
 
-  return { dom, pageErrors };
+  return { dom, pageErrors, calls };
 }
 
 function errorsOf(pageErrors, pattern) {
@@ -119,9 +150,10 @@ function errorsOf(pageErrors, pattern) {
 describe('renderer smoke and navigation', () => {
   let dom;
   let pageErrors;
+  let calls;
 
   beforeEach(async () => {
-    ({ dom, pageErrors } = bootRenderer());
+    ({ dom, pageErrors, calls } = bootRenderer());
     const booted = await waitFor(() => {
       const search = dom.window.document.getElementById('master-search');
       return search !== null && !dom.window.document.getElementById('app-nav').hidden;
@@ -189,5 +221,32 @@ describe('renderer smoke and navigation', () => {
 
     const newErrors = pageErrors.slice(before);
     expect(errorsOf(newErrors, /Cannot read properties of null|querySelectorAll|render/)).toEqual([]);
+  });
+
+  it('confirming a delete goes through app:confirm (never window.confirm) and leaves fields interactive', async () => {
+    dom.window.location.hash = '#/reports';
+    await waitFor(() => dom.window.document.getElementById('report-year') !== null);
+
+    const checkoutTab = dom.window.document.querySelector('#report-tabs .tab-btn[data-tab="checkout"]');
+    checkoutTab.click();
+    const rowReady = await waitFor(() => dom.window.document.querySelector('button[data-action="delete-checkout"]') !== null);
+    expect(rowReady).toBe(true);
+
+    const yearSelect = dom.window.document.getElementById('report-year');
+    yearSelect.focus();
+    expect(dom.window.document.activeElement).toBe(yearSelect);
+
+    const deleteBtn = dom.window.document.querySelector('button[data-action="delete-checkout"]');
+    deleteBtn.click();
+
+    await waitFor(() => calls.checkoutDeletes.length === 1);
+    expect(calls.confirms).toEqual(['Delete this checkout log entry?']);
+    expect(calls.nativeConfirms).toBe(0);
+    expect(calls.checkoutDeletes).toEqual([7]);
+    expect(errorsOf(pageErrors, /Cannot read properties of null|querySelectorAll/)).toEqual([]);
+
+    const refreshedSelect = dom.window.document.getElementById('report-year');
+    refreshedSelect.focus();
+    expect(dom.window.document.activeElement).toBe(refreshedSelect);
   });
 });

@@ -8,6 +8,7 @@ const api = {
   appGetStatus: () => invoke('app:getStatus'),
   appShutdown: () => invoke('app:shutdown'),
   appPrint: (html) => invoke('app:print', { html }),
+  appConfirm: (message) => invoke('app:confirm', { message }),
 
   authRegister: (username, password) => invoke('auth:register', { username, password }),
   authLogin: (username, password) => invoke('auth:login', { username, password }),

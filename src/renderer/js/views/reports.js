@@ -176,24 +176,28 @@
     var id = Number(btn.getAttribute('data-id'));
 
     if (action === 'delete-checkout') {
-      if (!window.confirm('Delete this checkout log entry?')) return;
-      window.dme.reportsDeleteCheckout(id).then(function (res) {
-        if (res && res.ok) {
-          App.flash(res.message || 'Checkout log entry removed successfully.', 'success');
-        } else {
-          App.flash((res && res.error) || 'Failed to delete checkout log entry.', 'error');
-        }
-        load();
+      App.confirm('Delete this checkout log entry?').then(function (confirmed) {
+        if (!confirmed) return;
+        window.dme.reportsDeleteCheckout(id).then(function (res) {
+          if (res && res.ok) {
+            App.flash(res.message || 'Checkout log entry removed successfully.', 'success');
+          } else {
+            App.flash((res && res.error) || 'Failed to delete checkout log entry.', 'error');
+          }
+          load();
+        });
       });
     } else if (action === 'delete-item-sale') {
-      if (!window.confirm('Delete this item sale log entry?')) return;
-      window.dme.reportsDeleteItemSale(id).then(function (res) {
-        if (res && res.ok) {
-          App.flash(res.message || 'Item sale log entry removed successfully.', 'success');
-        } else {
-          App.flash((res && res.error) || 'Failed to delete item sale log entry.', 'error');
-        }
-        load();
+      App.confirm('Delete this item sale log entry?').then(function (confirmed) {
+        if (!confirmed) return;
+        window.dme.reportsDeleteItemSale(id).then(function (res) {
+          if (res && res.ok) {
+            App.flash(res.message || 'Item sale log entry removed successfully.', 'success');
+          } else {
+            App.flash((res && res.error) || 'Failed to delete item sale log entry.', 'error');
+          }
+          load();
+        });
       });
     }
   }

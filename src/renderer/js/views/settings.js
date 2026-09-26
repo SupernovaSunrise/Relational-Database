@@ -70,13 +70,15 @@
     } else if (action === 'import-equipment') {
       doImport('importExportImportEquipment');
     } else if (action === 'shutdown') {
-      if (!window.confirm('Shut down the application?')) return;
-      window.dme.appShutdown().then(function (res) {
-        if (res && res.ok) {
-          App.flash('Shutting down...', 'success');
-        } else {
-          App.flash((res && res.error) || 'Shutdown failed.', 'error');
-        }
+      App.confirm('Shut down the application?').then(function (confirmed) {
+        if (!confirmed) return;
+        window.dme.appShutdown().then(function (res) {
+          if (res && res.ok) {
+            App.flash('Shutting down...', 'success');
+          } else {
+            App.flash((res && res.error) || 'Shutdown failed.', 'error');
+          }
+        });
       });
     } else if (action === 'logout') {
       App.logout();

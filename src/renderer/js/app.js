@@ -268,6 +268,56 @@
     });
   }
 
+var COMMON_ITEM_NAMES = [
+    'Upright Walker',
+    'Rolling Walker',
+    'Wheelchair',
+    'Bedrails',
+    'Shower Chair',
+    'Commode',
+    'Hospital Bed',
+    'Oxygen Concentrator',
+    'Nebulizer',
+    'CPAP Machine',
+    'Crutches',
+    'Cane',
+    'Knee Scooter',
+    'Lift Chair',
+    'Transfer Bench',
+  ];
+
+  function populateItemNameSuggestions(inputId, datalistId) {
+    var input = document.getElementById(inputId);
+    var list = document.getElementById(datalistId);
+    if (!input || !list) return;
+    input.setAttribute('list', datalistId);
+    var names = COMMON_ITEM_NAMES.slice();
+    var done = function () {
+      var seen = {};
+      var opts = names.filter(function (n) {
+        if (!n) return false;
+        if (seen[n]) return false;
+        seen[n] = true;
+        return true;
+      }).sort();
+      list.innerHTML = opts.map(function (n) {
+        return '<option value="' + escapeHtml(n) + '">';
+      }).join('');
+    };
+    if (window.dme && typeof window.dme.equipmentList === 'function') {
+      window.dme.equipmentList('').then(function (res) {
+        if (res && res.ok && Array.isArray(res.items)) {
+          res.items.forEach(function (item) {
+            if (item && item.item_name) names.push(item.item_name);
+          });
+        }
+        done();
+      }).catch(done);
+    } else {
+      done();
+    }
+  }
+
   window.App = {
     getUser: function () { return state.user; },
     isAdmin: function () { return !!(state.user && (state.user.isAdmin === true || state.user.isAdmin === 1)); },
@@ -287,6 +337,8 @@
       });
     },
     initInlineEditing: initInlineEditing,
+    populateItemNameSuggestions: populateItemNameSuggestions,
+    commonItemNames: COMMON_ITEM_NAMES,
     onSigningEvent: onSigningEvent,
     setTeardown: function (fn) { currentTeardown = fn; },
   };

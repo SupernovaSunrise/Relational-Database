@@ -17,6 +17,7 @@ function getDataHandler(event, payload) {
   let monthFilter = payload.monthFilter || '';
   const dateFrom = (payload.dateFrom || '').trim();
   const dateTo = (payload.dateTo || '').trim();
+  const search = (payload.search || '').trim();
   let reportData = [];
   let reportTitle = '';
   let analyticsSummary = null;
@@ -40,6 +41,11 @@ function getDataHandler(event, payload) {
         query += ' AND checkout_date <= ?';
         params.push(dateTo);
       }
+      if (search) {
+        query += ' AND (item_name LIKE ? OR equipment_id LIKE ? OR customer_zip_code LIKE ?)';
+        const like = '%' + search + '%';
+        params.push(like, like, like);
+      }
       query += ' ORDER BY checkout_date DESC';
       reportData = conn.prepare(query).all(...params).map((row) => ({ ...row }));
       reportTitle = 'Checkout Log';
@@ -57,6 +63,11 @@ function getDataHandler(event, payload) {
       if (dateTo) {
         query += ' AND deletion_date <= ?';
         params.push(dateTo);
+      }
+      if (search) {
+        query += ' AND (item_name LIKE ? OR equipment_id LIKE ?)';
+        const like = '%' + search + '%';
+        params.push(like, like);
       }
       query += ' ORDER BY deletion_date DESC';
       reportData = conn.prepare(query).all(...params).map((row) => ({ ...row }));

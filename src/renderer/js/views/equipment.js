@@ -236,7 +236,8 @@
           '</div>' +
           '<div class="form-group">' +
             '<label for="add-item-name">Item Name</label>' +
-            '<input type="text" id="add-item-name" placeholder="e.g., Wheelchair" required>' +
+            '<input type="text" id="add-item-name" list="add-item-name-list" placeholder="e.g., Wheelchair" required>' +
+            '<datalist id="add-item-name-list"></datalist>' +
           '</div>' +
           '<button type="submit" class="btn">Add Equipment</button>' +
         '</form>' +
@@ -274,6 +275,7 @@
 
     container.addEventListener('click', onContainerClick);
     App.initInlineEditing(container, load);
+    App.populateItemNameSuggestions('add-item-name', 'add-item-name-list');
     App.setTeardown(function () {
       container = null;
     });

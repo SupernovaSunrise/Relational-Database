@@ -645,10 +645,11 @@
               '<label for="master-equipment-id">Equipment ID</label>' +
               '<input type="text" id="master-equipment-id" placeholder="AA-1234" required>' +
             '</div>' +
-            '<div class="form-group">' +
-              '<label for="master-item-name">Item Name</label>' +
-              '<input type="text" id="master-item-name" required>' +
-            '</div>' +
+'<div class="form-group">' +
+            '<label for="master-item-name">Item Name</label>' +
+            '<input type="text" id="master-item-name" list="master-item-name-list" placeholder="e.g., Wheelchair" required>' +
+            '<datalist id="master-item-name-list"></datalist>' +
+          '</div>' +
             '<button type="submit" class="btn">Add Equipment</button>' +
           '</form>' +
         '</section>' +
@@ -776,6 +777,8 @@
     App.initInlineEditing(container, function (table, field, rowId, value, cell) {
       patchRowAfterEdit(table, field, rowId, value, cell);
     });
+
+    App.populateItemNameSuggestions('master-item-name', 'master-item-name-list');
 
     if (module.unsubscribeSigning) {
       module.unsubscribeSigning();

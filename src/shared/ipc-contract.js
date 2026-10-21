@@ -111,6 +111,7 @@ const PAYLOADS = Object.freeze({
     monthFilter: 'string:16?',
     dateFrom: 'string:32?',
     dateTo: 'string:32?',
+    search: 'string:255?',
   },
   [CHANNELS.REPORTS_DELETE_CHECKOUT]: { id: 'number' },
   [CHANNELS.REPORTS_DELETE_ITEM_SALE]: { id: 'number' },

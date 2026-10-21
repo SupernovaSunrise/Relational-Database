@@ -7,6 +7,7 @@
     monthFilter: '',
     dateFrom: '',
     dateTo: '',
+    search: '',
   };
   var container = null;
   var renderToken = 0;
@@ -21,6 +22,7 @@
       monthFilter: module.monthFilter,
       dateFrom: module.dateFrom,
       dateTo: module.dateTo,
+      search: module.search,
     };
     window.dme.reportsGetData(payload).then(function (res) {
       if (!container || token !== renderToken) return;
@@ -228,9 +230,13 @@
           '<label for="report-date-from">From</label>' +
           '<input type="date" id="report-date-from">' +
         '</div>' +
-        '<div class="form-group" id="date-to-group" hidden>' +
-          '<label for="report-date-to">To</label>' +
-          '<input type="date" id="report-date-to">' +
+'<div class="form-group" id="date-to-group" hidden>' +
+        '<label for="report-date-to">To</label>' +
+        '<input type="date" id="report-date-to">' +
+        '</div>' +
+        '<div class="form-group" id="report-search-group" hidden>' +
+        '<label for="report-search">Search</label>' +
+        '<input type="search" id="report-search" placeholder="Item, equipment ID, ZIP..." autocomplete="off">' +
         '</div>' +
         '<div class="report-filter-actions">' +
           '<button type="button" class="btn" id="report-filter-btn">Filter</button>' +
@@ -246,17 +252,29 @@
         module.monthFilter = '';
         module.dateFrom = '';
         module.dateTo = '';
+        module.search = '';
+        if (module.reportType === 'analytics') {
+          module.yearFilter = '';
+        } else if (!module.yearFilter) {
+          var ys = container.querySelector('#report-year');
+          if (ys && ys.options && ys.options.length > 1) module.yearFilter = ys.options[1].value;
+        }
         Array.prototype.forEach.call(tabs, function (b) { b.classList.remove('active'); });
         tab.classList.add('active');
         var dateFromInput = container.querySelector('#report-date-from');
         var dateToInput = container.querySelector('#report-date-to');
         var fromGroup = container.querySelector('#date-from-group');
         var toGroup = container.querySelector('#date-to-group');
-        var showDates = module.reportType !== 'analytics';
+var showDates = module.reportType !== 'analytics';
+        var showSearch = module.reportType !== 'analytics';
         fromGroup.hidden = !showDates;
         toGroup.hidden = !showDates;
+        var searchGroup = container.querySelector('#report-search-group');
+        if (searchGroup) searchGroup.hidden = !showSearch;
         if (dateFromInput) dateFromInput.value = '';
         if (dateToInput) dateToInput.value = '';
+        var searchInput = container.querySelector('#report-search');
+        if (searchInput) searchInput.value = module.search || '';
         load();
       });
     });
@@ -270,11 +288,20 @@
 
     var dateFromInput = container.querySelector('#report-date-from');
     var dateToInput = container.querySelector('#report-date-to');
+    var searchInput = container.querySelector('#report-search');
     container.querySelector('#report-filter-btn').addEventListener('click', function () {
       module.dateFrom = dateFromInput.value || '';
       module.dateTo = dateToInput.value || '';
+      module.search = (searchInput && searchInput.value || '').trim();
       load();
     });
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        module.search = searchInput.value.trim();
+        clearTimeout(module.searchTimer);
+        module.searchTimer = setTimeout(load, 250);
+      });
+    }
 
     container.querySelector('#report-print-btn').addEventListener('click', function () {
       var results = container.querySelector('#report-results');
@@ -290,6 +317,12 @@
     window.dme.reportsGetYears().then(function (res) {
       if (!container || token !== renderToken) return;
       if (res && res.ok) renderYears(res.years || []);
+      if ((module.reportType === 'checkout' || module.reportType === 'item_sales') && !module.yearFilter && res && res.years && res.years.length) {
+        module.yearFilter = String(res.years[0]);
+        var yearSelect = container.querySelector('#report-year');
+        if (yearSelect) yearSelect.value = module.yearFilter;
+        load();
+      }
     });
 
     load();

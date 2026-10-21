@@ -1,0 +1,147 @@
+body.sign-body {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+  background-color: #f5f5f5;
+  font-size: 20px;
+}
+
+.sign-shell {
+  background-color: white;
+  padding: 28px 32px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.sign-header h1 {
+  margin: 0 0 4px;
+  font-size: 32px;
+}
+
+.sign-subtitle {
+  margin: 0 0 20px;
+  color: #555;
+}
+
+.sign-hint {
+  color: #666;
+  font-size: 18px;
+}
+
+.sign-equip-table {
+  font-size: 20px;
+}
+
+.sign-terms {
+  font-size: 20px;
+  line-height: 1.55;
+}
+
+.sign-terms p {
+  line-height: 1.55;
+}
+
+.sign-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 24px 0;
+  padding: 16px;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  background-color: #f0f7ff;
+}
+
+.sign-check-input {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.sign-check-label {
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.sign-sig-box {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.sign-sig-box canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.sign-sig-unavailable {
+  padding: 24px;
+  text-align: center;
+  color: #666;
+}
+
+.sign-actions {
+  margin-top: 28px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sign-actions .btn {
+  font-size: 24px;
+  padding: 16px 40px;
+  min-width: 260px;
+}
+
+#sig-clear-btn {
+  font-size: 20px;
+  padding: 12px 24px;
+}
+
+#sign-flash {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.sign-alert {
+  padding: 16px 28px;
+  border-radius: 8px;
+  font-size: 22px;
+  max-width: 90vw;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.sign-alert-ok {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.sign-alert-error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: white;
+}
+
+.btn-primary:disabled {
+  background-color: #6c757d;
+  border-color: #6c757d;
+}

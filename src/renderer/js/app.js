@@ -143,8 +143,49 @@
     });
   }
 
+  var signingListeners = [];
+  var unsubscribeSigning = null;
+
+  function onSigningEvent(listener) {
+    if (typeof listener !== 'function') return function () {};
+    signingListeners.push(listener);
+    return function () {
+      var index = signingListeners.indexOf(listener);
+      if (index !== -1) signingListeners.splice(index, 1);
+    };
+  }
+
+  function dispatchSigningEvent(payload) {
+    var evt = payload || {};
+    if (evt.type === 'completed') {
+      flash('Customer agreement recorded successfully.', 'success');
+    } else if (evt.type === 'cancelled') {
+      flash('Signing cancelled and pending items removed.', 'success');
+    } else if (evt.type === 'interrupted') {
+      flash('Signing ended before the agreement was signed. The pending checkout was cancelled.', 'error');
+    }
+    signingListeners.slice().forEach(function (listener) {
+      try {
+        listener(evt);
+      } catch (err) {
+        console.error('Signing listener error:', err);
+      }
+    });
+  }
+
+  function bindSigningEvents() {
+    if (unsubscribeSigning || !window.dme || typeof window.dme.onSigningEvent !== 'function') return;
+    unsubscribeSigning = window.dme.onSigningEvent(dispatchSigningEvent) || null;
+  }
+
   function logout() {
-    return window.dme.authLogout().then(function (res) {
+    return window.dme.signingGetStatus().then(function (status) {
+      if (status && status.ok && status.active) {
+        flash('Finish or cancel the signing session before logging out.', 'error');
+        return;
+      }
+      return window.dme.authLogout();
+    }).then(function (res) {
       if (res && res.ok) flash('You have been logged out.', 'success');
       else if (res && !res.ok && res.error && res.error !== 'Not authenticated.') flash(res.error, 'error');
       return refreshSession();
@@ -222,6 +263,7 @@
     refreshSession().then(function () {
       window.addEventListener('hashchange', applyRoute);
       if (logoutBtn) logoutBtn.addEventListener('click', logout);
+      bindSigningEvents();
       applyRoute();
     });
   }
@@ -245,6 +287,7 @@
       });
     },
     initInlineEditing: initInlineEditing,
+    onSigningEvent: onSigningEvent,
     setTeardown: function (fn) { currentTeardown = fn; },
   };
 

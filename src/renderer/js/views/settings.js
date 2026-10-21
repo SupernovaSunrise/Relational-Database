@@ -52,6 +52,49 @@
     });
   }
 
+  function loadSigningSettings() {
+    var toggle = document.getElementById('tablet-signing-toggle');
+    var status = document.getElementById('tablet-signing-status');
+    if (!toggle) return;
+    window.dme.signingGetStatus().then(function (res) {
+      if (!res || !res.ok) {
+        if (status) status.textContent = 'Signing display status unavailable.';
+        return;
+      }
+      toggle.checked = !!res.enabled;
+      var isAdmin = App.isAdmin();
+      toggle.disabled = !isAdmin;
+      if (status) {
+        if (!res.secondaryDisplayName) {
+          status.textContent = 'No second display detected. Agreements will be signed on this screen.';
+        } else {
+          status.textContent = 'Second display detected: ' + res.secondaryDisplayName + '.';
+        }
+        if (!isAdmin) status.textContent += ' Only administrators can change this setting.';
+      }
+    }).catch(function () {
+      if (status) status.textContent = 'Signing display status unavailable.';
+    });
+    toggle.addEventListener('change', function () {
+      var enabled = toggle.checked;
+      toggle.disabled = true;
+      window.dme.signingSetEnabled(enabled).then(function (res) {
+        if (res && res.ok) {
+          App.flash('Tablet signing ' + (res.enabled ? 'enabled' : 'disabled') + '.', 'success');
+          toggle.checked = !!res.enabled;
+        } else {
+          App.flash((res && res.error) || 'Failed to update signing settings.', 'error');
+          toggle.checked = !enabled;
+        }
+        toggle.disabled = !App.isAdmin();
+      }).catch(function () {
+        App.flash('Failed to update signing settings.', 'error');
+        toggle.checked = !enabled;
+        toggle.disabled = !App.isAdmin();
+      });
+    });
+  }
+
   function onContainerClick(e) {
     var btn = e.target.closest ? e.target.closest('[data-action]') : null;
     if (!btn) return;
@@ -157,6 +200,12 @@
 
     html +=
       '</div>' +
+      '<section class="control-section" id="signing-settings">' +
+        '<h2>Customer Signing</h2>' +
+        '<p>When a second display is connected (for example a tablet running Spacedesk), the customer agreement is shown there so the customer can sign. If no second display is connected, agreements are signed on this screen as usual.</p>' +
+        '<label class="checkbox-label"><input type="checkbox" id="tablet-signing-toggle"><span>Send agreements to the second display</span></label>' +
+        '<p class="hint" id="tablet-signing-status">Detecting second display...</p>' +
+      '</section>' +
       '<section class="control-section">' +
         '<h2>Import/Export Instructions</h2>' +
         '<p><strong>Customers:</strong> Columns: Name, Phone, ZipCode (starting from row 2).</p>' +
@@ -171,6 +220,8 @@
       e.preventDefault();
       submitChangePassword(e.target);
     });
+
+    loadSigningSettings();
 
     container.addEventListener('click', function (e) {
       var btn = e.target.closest ? e.target.closest('[data-action]') : null;

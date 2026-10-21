@@ -1,7 +1,9 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { registerIpcHandlers, setTrustedWebContents } = require('./ipc');
+const ipc = require('./ipc');
+const { registerIpcHandlers, setTrustedWebContents } = ipc;
+const signing = require('./signing');
 const { initDb } = require('./db');
 
 let mainWindow = null;
@@ -41,6 +43,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    signing.closeSigning();
   });
 }
 
@@ -50,6 +53,10 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     initDb();
     registerIpcHandlers();
+    signing.initSigning(
+      { addSignerWebContents: ipc.addSignerWebContents, removeTrustedWebContents: ipc.removeTrustedWebContents },
+      () => mainWindow
+    );
     createWindow();
 
     app.on('activate', () => {

@@ -4,6 +4,16 @@ function invoke(channel, payload) {
   return ipcRenderer.invoke(channel, payload);
 }
 
+const SUBSCRIBABLE_EVENTS = Object.freeze(['signing:event']);
+
+function on(channel, listener) {
+  if (SUBSCRIBABLE_EVENTS.indexOf(channel) === -1) return () => {};
+  if (typeof listener !== 'function') return () => {};
+  const wrapped = (_event, payload) => listener(payload);
+  ipcRenderer.on(channel, wrapped);
+  return () => ipcRenderer.removeListener(channel, wrapped);
+}
+
 const api = {
   appGetStatus: () => invoke('app:getStatus'),
   appShutdown: () => invoke('app:shutdown'),
@@ -37,6 +47,16 @@ const api = {
   agreementsGetLoan: (loanId) => invoke('agreements:getLoan', { loanId }),
   agreementsGetCustomer: (customerId) => invoke('agreements:getCustomer', { customerId }),
   agreementsSubmit: (payload) => invoke('agreements:submit', payload),
+
+  signingStart: (payload) => invoke('signing:start', payload),
+  signingGetStatus: () => invoke('signing:getStatus'),
+  signingSetEnabled: (enabled) => invoke('signing:setEnabled', { enabled }),
+  signingSetWitness: (witnessName) => invoke('signing:setWitness', { witnessName }),
+  signingGetContext: () => invoke('signing:getContext'),
+  signingSubmit: (waiverAgreed, signatureData) => invoke('signing:submit', { waiverAgreed, signatureData }),
+  signingCancel: () => invoke('signing:cancel'),
+  signingAbandon: () => invoke('signing:abandon'),
+  onSigningEvent: (listener) => on('signing:event', listener),
 
   reportsGetYears: () => invoke('reports:getYears'),
   reportsGetData: (payload) => invoke('reports:getData', payload),

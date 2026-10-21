@@ -15,6 +15,14 @@
     pendingCustomerReference: null,
     container: null,
     renderToken: 0,
+    signingActive: false,
+    signingDisplayName: '',
+    signingLoanIds: [],
+    signingCustomerId: null,
+    signingCheckoutDate: '',
+    signingDueDate: '',
+    signingWitness: '',
+    unsubscribeSigning: null,
   };
 
   function getStatus(item) {
@@ -307,6 +315,79 @@
     updateCheckoutBtn();
   }
 
+  function navigateToInlineAgreement(customerId, loanIds, checkoutDate, dueDate) {
+    App.navigate('agreement', {
+      mode: 'sign',
+      customerId: customerId,
+      loanIds: loanIds.join(','),
+      checkoutDate: checkoutDate || '',
+      dueDate: dueDate || '',
+    });
+  }
+
+  function renderSigningPanel() {
+    if (!module.container) return;
+    var section = module.container.querySelector('#signing-section');
+    if (!section) return;
+    if (!module.signingActive) {
+      section.hidden = true;
+      section.innerHTML = '';
+      return;
+    }
+    section.hidden = false;
+    section.innerHTML =
+      '<h2>Waiting for Customer Signature</h2>' +
+      '<p class="hint">The customer agreement is being displayed on <strong>' + App.escapeHtml(module.signingDisplayName || 'the second display') + '</strong>. The checkout is saved once the customer submits.</p>' +
+      '<div class="checkout-bar">' +
+        '<div class="form-group">' +
+          '<label for="signing-witness">Witnessed By (optional)</label>' +
+          '<input type="text" id="signing-witness" maxlength="255" placeholder="Staff name" autocomplete="off" value="' + App.escapeHtml(module.signingWitness) + '">' +
+        '</div>' +
+      '</div>' +
+      '<div class="agreement-actions">' +
+        '<button type="button" class="btn" data-action="signing-sign-here">Sign on this screen</button>' +
+        '<button type="button" class="btn btn-danger" data-action="signing-cancel">Cancel Checkout</button>' +
+      '</div>';
+  }
+
+  function setSigningActive(active, details) {
+    module.signingActive = !!active;
+    module.signingDisplayName = (details && details.displayName) || module.signingDisplayName;
+    if (details && details.loanIds) module.signingLoanIds = details.loanIds.slice();
+    if (details && details.customerId) module.signingCustomerId = details.customerId;
+    if (details && details.checkoutDate !== undefined) module.signingCheckoutDate = details.checkoutDate;
+    if (details && details.dueDate !== undefined) module.signingDueDate = details.dueDate;
+    renderSigningPanel();
+  }
+
+  function clearSigningState() {
+    module.signingActive = false;
+    module.signingDisplayName = '';
+    module.signingLoanIds = [];
+    module.signingCustomerId = null;
+    module.signingCheckoutDate = '';
+    module.signingDueDate = '';
+    module.signingWitness = '';
+  }
+
+  function refreshSigningStatus() {
+    if (!module.container) return Promise.resolve();
+    return window.dme.signingGetStatus().then(function (res) {
+      if (!module.container || !res || !res.ok) return;
+      if (res.active) {
+        module.signingWitness = module.signingWitness || '';
+        setSigningActive(true, {
+          displayName: res.secondaryDisplayName || 'the second display',
+          loanIds: res.loanIds || [],
+          customerId: res.customerId,
+        });
+      } else if (module.signingActive) {
+        clearSigningState();
+        renderSigningPanel();
+      }
+    }).catch(function () {});
+  }
+
   function doCheckout(customerId, equipmentIds) {
     var checkoutDateInput = module.container.querySelector('#checkout-date');
     var checkoutDate = checkoutDateInput ? checkoutDateInput.value : '';
@@ -315,13 +396,32 @@
         App.flash((res && res.error) || 'Checkout failed.', 'error');
         return;
       }
-      var loanIdsCsv = res.loanIdsCsv || (res.loanIds || []).join(',');
-      App.navigate('agreement', {
-        mode: 'sign',
+      var loanIds = res.loanIds || [];
+      var startPayload = {
         customerId: res.customerId,
-        loanIds: loanIdsCsv,
+        loanIds: loanIds,
         checkoutDate: res.checkoutDate,
         dueDate: res.dueDate,
+      };
+      return window.dme.signingStart(startPayload).then(function (signRes) {
+        if (signRes && signRes.ok && signRes.started) {
+          setSigningActive(true, {
+            displayName: signRes.displayName,
+            loanIds: loanIds,
+            customerId: res.customerId,
+            checkoutDate: res.checkoutDate,
+            dueDate: res.dueDate,
+          });
+          App.flash('Agreement sent to ' + (signRes.displayName || 'the second display') + '.', 'success');
+          return;
+        }
+        if (signRes && !signRes.ok) {
+          return window.dme.loansCancelPending(loanIds).then(function () {
+            App.flash((signRes && signRes.error) || 'Could not start signing on the second display.', 'error');
+            loadAndRender();
+          });
+        }
+        navigateToInlineAgreement(res.customerId, loanIds, res.checkoutDate, res.dueDate);
       });
     });
   }
@@ -419,7 +519,40 @@
       App.navigate('agreement', { mode: 'view', customerId: btn.getAttribute('data-customer-id') });
     } else if (action === 'candidate-select') {
       doCheckout(Number(btn.getAttribute('data-customer-id')), module.pendingEquipmentIds);
+    } else if (action === 'signing-sign-here') {
+      signHere();
+    } else if (action === 'signing-cancel') {
+      cancelSigning();
     }
+  }
+
+  function signHere() {
+    return window.dme.signingAbandon().then(function (res) {
+      if (!res || !res.ok || !res.active) {
+        clearSigningState();
+        renderSigningPanel();
+        return;
+      }
+      var customerId = res.customerId;
+      var loanIds = res.loanIds || [];
+      var checkoutDate = res.checkoutDate;
+      var dueDate = res.dueDate;
+      clearSigningState();
+      renderSigningPanel();
+      navigateToInlineAgreement(customerId, loanIds, checkoutDate, dueDate);
+    });
+  }
+
+  function cancelSigning() {
+    return App.confirm('Cancel this checkout and remove the pending items?').then(function (confirmed) {
+      if (!confirmed) return;
+      return window.dme.signingCancel().then(function (res) {
+        clearSigningState();
+        renderSigningPanel();
+        App.flash((res && (res.message || res.error)) || 'Signing cancelled.', res && res.ok ? 'success' : 'error');
+        loadAndRender();
+      });
+    });
   }
 
   function submitAddCustomer(form) {
@@ -539,6 +672,8 @@
 
       '<section class="candidate-section" id="candidate-section" hidden></section>' +
 
+      '<section class="control-section" id="signing-section" hidden></section>' +
+
       '<div class="filter-row">' +
         '<div class="form-group">' +
           '<label for="master-search">Search equipment or customer</label>' +
@@ -642,10 +777,35 @@
       patchRowAfterEdit(table, field, rowId, value, cell);
     });
 
+    if (module.unsubscribeSigning) {
+      module.unsubscribeSigning();
+      module.unsubscribeSigning = null;
+    }
+    module.unsubscribeSigning = App.onSigningEvent(function (evt) {
+      if (!module.container) return;
+      if (evt.type === 'completed' || evt.type === 'cancelled' || evt.type === 'interrupted') {
+        clearSigningState();
+        renderSigningPanel();
+        loadAndRender();
+      }
+    });
+
+    container.addEventListener('input', function (e) {
+      if (e.target && e.target.id === 'signing-witness') {
+        module.signingWitness = e.target.value;
+        window.dme.signingSetWitness(e.target.value);
+      }
+    });
+
     App.setTeardown(function () {
+      if (module.unsubscribeSigning) {
+        module.unsubscribeSigning();
+        module.unsubscribeSigning = null;
+      }
       module.container = null;
     });
 
+    refreshSigningStatus();
     loadAndRender();
   }
 

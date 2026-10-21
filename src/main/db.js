@@ -158,6 +158,10 @@ function initDb(dbPath) {
         deletion_date TEXT NOT NULL,
         sale_price TEXT
       );
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
     `);
     conn.exec(`
       CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
@@ -263,6 +267,24 @@ function countUsers() {
   });
 }
 
+function getSetting(key, defaultValue) {
+  return withDb((conn) => {
+    const row = conn.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    if (!row || row.value === null || row.value === undefined) return defaultValue === undefined ? null : defaultValue;
+    return row.value;
+  });
+}
+
+function setSetting(key, value) {
+  return withDb((conn) => {
+    conn.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(
+      key,
+      value === null || value === undefined ? null : String(value)
+    );
+    return true;
+  });
+}
+
 function updatePassword(id, passwordHash) {
   return withDb((conn) => {
     return conn.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id).changes;
@@ -280,6 +302,8 @@ module.exports = {
   getUserById,
   createUser,
   countUsers,
+  getSetting,
+  setSetting,
   updatePassword,
   log,
 };

@@ -13,7 +13,7 @@ jest.mock('electron', () => ({
   },
 }));
 
-const { CHANNELS, PAYLOADS, REQUIRED_AUTH, REQUIRED_ADMIN, MAX_PAYLOAD_BYTES } = require('../src/shared/ipc-contract');
+const { CHANNELS, PAYLOADS, REQUIRED_AUTH, REQUIRED_ADMIN, MAX_PAYLOAD_BYTES, SIGNING_CHANNELS, SIGNER_CHANNELS } = require('../src/shared/ipc-contract');
 const ipc = require('../src/main/ipc');
 const db = require('../src/main/db');
 const auth = require('../src/main/auth');
@@ -52,6 +52,7 @@ describe('ipc-contract module invariants', () => {
       CHANNELS.IMPORT_EXPORT_EXPORT_MASTER,
       CHANNELS.IMPORT_EXPORT_IMPORT_CUSTOMERS,
       CHANNELS.IMPORT_EXPORT_IMPORT_EQUIPMENT,
+      CHANNELS.SIGNING_SET_ENABLED,
     ];
     for (const channel of expectedAdmin) {
       expect(REQUIRED_ADMIN.has(channel)).toBe(true);
@@ -62,6 +63,80 @@ describe('ipc-contract module invariants', () => {
   test('auth:changePassword and auth:logout are not public', () => {
     expect(REQUIRED_AUTH.has(CHANNELS.AUTH_CHANGE_PASSWORD)).toBe(false);
     expect(REQUIRED_AUTH.has(CHANNELS.AUTH_LOGOUT)).toBe(false);
+  });
+});
+
+describe('signing channel invariants', () => {
+  test('every signing channel is declared in the contract', () => {
+    expect(SIGNING_CHANNELS).toEqual(
+      new Set([
+        CHANNELS.SIGNING_START,
+        CHANNELS.SIGNING_GET_STATUS,
+        CHANNELS.SIGNING_SET_ENABLED,
+        CHANNELS.SIGNING_SET_WITNESS,
+        CHANNELS.SIGNING_GET_CONTEXT,
+        CHANNELS.SIGNING_SUBMIT,
+        CHANNELS.SIGNING_CANCEL,
+        CHANNELS.SIGNING_ABANDON,
+      ])
+    );
+  });
+
+  test('signing channels are neither public nor admin-gated (except setEnabled)', () => {
+    for (const channel of SIGNING_CHANNELS) {
+      expect(REQUIRED_AUTH.has(channel)).toBe(false);
+    }
+    expect(REQUIRED_ADMIN.has(CHANNELS.SIGNING_SET_ENABLED)).toBe(true);
+    for (const channel of SIGNING_CHANNELS) {
+      if (channel === CHANNELS.SIGNING_SET_ENABLED) continue;
+      expect(REQUIRED_ADMIN.has(channel)).toBe(false);
+    }
+  });
+
+  test('the signer window only gets read-context and submit', () => {
+    expect(Array.from(SIGNER_CHANNELS).sort()).toEqual(
+      [CHANNELS.SIGNING_GET_CONTEXT, CHANNELS.SIGNING_SUBMIT].sort()
+    );
+    for (const channel of SIGNER_CHANNELS) {
+      expect(SIGNING_CHANNELS.has(channel)).toBe(true);
+    }
+    expect(SIGNER_CHANNELS.has(CHANNELS.CUSTOMERS_LIST)).toBe(false);
+    expect(SIGNER_CHANNELS.has(CHANNELS.AGREEMENTS_SUBMIT)).toBe(false);
+    expect(SIGNER_CHANNELS.has(CHANNELS.APP_SHUTDOWN)).toBe(false);
+  });
+
+  test('signing payloads validate fail-closed', () => {
+    expect(
+      ipc.validatePayload(CHANNELS.SIGNING_START, {
+        customerId: 1,
+        loanIds: [1, 2],
+        checkoutDate: '2024-01-01',
+        dueDate: '2024-05-01',
+      })
+    ).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_START, { customerId: 1, loanIds: [1], checkoutDate: '2024-01-01' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_START, { customerId: 1, loanIds: [1] })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_START, { customerId: 1, loanIds: ['1'], checkoutDate: '2024-01-01' })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SET_ENABLED, { enabled: true })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SET_ENABLED, { enabled: 1 })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SET_ENABLED, {})).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SET_WITNESS, {})).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SET_WITNESS, { witnessName: null })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SET_WITNESS, { witnessName: 'x'.repeat(256) })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SUBMIT, { waiverAgreed: true })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SUBMIT, { waiverAgreed: true, signatureData: '' })).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SUBMIT, { waiverAgreed: 'yes' })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SUBMIT, {})).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_GET_CONTEXT, {})).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_GET_CONTEXT, { loanId: 3 })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_CANCEL, {})).toBe(true);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_ABANDON, {})).toBe(true);
+  });
+
+  test('the signer cannot smuggle customer or loan ids into submit', () => {
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SUBMIT, { waiverAgreed: true, customerId: 7 })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SUBMIT, { waiverAgreed: true, loanIds: [7] })).toBe(false);
+    expect(ipc.validatePayload(CHANNELS.SIGNING_SUBMIT, { waiverAgreed: true, witnessName: 'Mallory' })).toBe(false);
   });
 });
 
@@ -246,6 +321,52 @@ describe('isTrustedSender', () => {
   });
 });
 
+describe('sender roles', () => {
+  test('the main window is trusted with the main role', () => {
+    ipc.setTrustedWebContents({ id: 42 });
+    expect(ipc.getSenderRole(fakeEvent(42))).toBe('main');
+    expect(ipc.senderMayUseChannel(fakeEvent(42), CHANNELS.CUSTOMERS_DELETE)).toBe(true);
+  });
+
+  test('unknown senders have no role and no channels', () => {
+    ipc.setTrustedWebContents({ id: 42 });
+    expect(ipc.getSenderRole(fakeEvent(43))).toBeNull();
+    expect(ipc.senderMayUseChannel(fakeEvent(43), CHANNELS.CUSTOMERS_LIST)).toBe(false);
+    expect(ipc.getSenderRole(null)).toBeNull();
+  });
+
+  test('the signer window is trusted but limited to its allowlist', () => {
+    ipc.setTrustedWebContents({ id: 42 });
+    ipc.addSignerWebContents({ id: 99 });
+    expect(ipc.isTrustedSender(fakeEvent(99))).toBe(true);
+    expect(ipc.getSenderRole(fakeEvent(99))).toBe('signer');
+    expect(ipc.senderMayUseChannel(fakeEvent(99), CHANNELS.SIGNING_GET_CONTEXT)).toBe(true);
+    expect(ipc.senderMayUseChannel(fakeEvent(99), CHANNELS.SIGNING_SUBMIT)).toBe(true);
+    expect(ipc.senderMayUseChannel(fakeEvent(99), CHANNELS.CUSTOMERS_LIST)).toBe(false);
+    expect(ipc.senderMayUseChannel(fakeEvent(99), CHANNELS.AGREEMENTS_SUBMIT)).toBe(false);
+    expect(ipc.senderMayUseChannel(fakeEvent(99), CHANNELS.APP_SHUTDOWN)).toBe(false);
+    expect(ipc.senderMayUseChannel(fakeEvent(99), CHANNELS.SIGNING_CANCEL)).toBe(false);
+    expect(ipc.senderMayUseChannel(fakeEvent(99), CHANNELS.SIGNING_START)).toBe(false);
+  });
+
+  test('setTrustedWebContents resets the map and drops signer trust', () => {
+    ipc.setTrustedWebContents({ id: 42 });
+    ipc.addSignerWebContents({ id: 99 });
+    ipc.setTrustedWebContents({ id: 42 });
+    expect(ipc.isTrustedSender(fakeEvent(99))).toBe(false);
+  });
+
+  test('removeTrustedWebContents revokes a single sender', () => {
+    ipc.setTrustedWebContents({ id: 42 });
+    ipc.addSignerWebContents({ id: 99 });
+    ipc.removeTrustedWebContents({ id: 99 });
+    expect(ipc.isTrustedSender(fakeEvent(99))).toBe(false);
+    expect(ipc.isTrustedSender(fakeEvent(42))).toBe(true);
+    ipc.removeTrustedWebContents({ id: 999 });
+    ipc.removeTrustedWebContents(null);
+  });
+});
+
 describe('IPC handler registration and gating pipeline', () => {
   let temp;
 
@@ -321,5 +442,39 @@ describe('IPC handler registration and gating pipeline', () => {
     const result = mockIpcHandlers[CHANNELS.EQUIPMENT_LIST](fakeEvent(1), {});
     expect(result.ok).toBe(true);
     expect(Array.isArray(result.items)).toBe(true);
+  });
+
+  test('the signing window cannot reach non-signing channels', () => {
+    auth.setSession({ id: 1, username: 'staff', isAdmin: 1 });
+    ipc.addSignerWebContents({ id: 7 });
+
+    const customers = mockIpcHandlers[CHANNELS.CUSTOMERS_LIST](fakeEvent(7), {});
+    expect(customers).toEqual({ ok: false, error: 'unauthorized channel' });
+
+    const shutdown = mockIpcHandlers[CHANNELS.APP_SHUTDOWN](fakeEvent(7), {});
+    expect(shutdown).toEqual({ ok: false, error: 'unauthorized channel' });
+
+    const agreementsSubmit = mockIpcHandlers[CHANNELS.AGREEMENTS_SUBMIT](fakeEvent(7), {
+      customerId: 1,
+      loanIds: [1],
+      checkoutDate: '2024-01-01',
+      agreementDate: '2024-01-01',
+      waiverAgreed: true,
+    });
+    expect(agreementsSubmit).toEqual({ ok: false, error: 'unauthorized channel' });
+
+    const forgedSubmit = mockIpcHandlers[CHANNELS.SIGNING_SUBMIT](fakeEvent(7), {
+      waiverAgreed: true,
+      customerId: 1,
+    });
+    expect(forgedSubmit).toEqual({ ok: false, error: 'invalid payload' });
+  });
+
+  test('the main window keeps full channel access while a signer is open', () => {
+    auth.setSession({ id: 1, username: 'staff', isAdmin: 1 });
+    ipc.addSignerWebContents({ id: 7 });
+    const result = mockIpcHandlers[CHANNELS.CUSTOMERS_LIST](fakeEvent(1), {});
+    expect(result.ok).toBe(true);
+    auth.clearSession();
   });
 });

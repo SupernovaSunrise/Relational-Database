@@ -1,5 +1,5 @@
 const { app, ipcMain } = require('electron');
-const { CHANNELS, PAYLOADS, REQUIRED_AUTH, REQUIRED_ADMIN, MAX_PAYLOAD_BYTES } = require('../shared/ipc-contract');
+const { CHANNELS, PAYLOADS, REQUIRED_AUTH, REQUIRED_ADMIN, MAX_PAYLOAD_BYTES, SIGNER_CHANNELS } = require('../shared/ipc-contract');
 const db = require('./db');
 const auth = require('./auth');
 const customers = require('./features/customers');
@@ -9,17 +9,47 @@ const agreements = require('./features/agreements');
 const reports = require('./features/reports');
 const importExport = require('./features/import-export');
 const print = require('./features/print');
+const signing = require('./signing');
 
-let trustedWebContentsId = null;
+const ROLE_MAIN = 'main';
+const ROLE_SIGNER = 'signer';
+
+const trustedWebContents = new Map();
 
 function setTrustedWebContents(webContents) {
-  trustedWebContentsId = webContents ? webContents.id : null;
+  trustedWebContents.clear();
+  if (webContents && typeof webContents.id === 'number') {
+    trustedWebContents.set(webContents.id, ROLE_MAIN);
+  }
+}
+
+function addSignerWebContents(webContents) {
+  if (!webContents || typeof webContents.id !== 'number') return;
+  trustedWebContents.set(webContents.id, ROLE_SIGNER);
+}
+
+function removeTrustedWebContents(webContents) {
+  if (!webContents || typeof webContents.id !== 'number') return;
+  trustedWebContents.delete(webContents.id);
+}
+
+function getSenderRole(event) {
+  if (!event || !event.sender) return null;
+  const role = trustedWebContents.get(event.sender.id);
+  return role === undefined ? null : role;
 }
 
 function isTrustedSender(event) {
   if (!event || !event.sender) return false;
-  if (trustedWebContentsId === null) return false;
-  return event.sender.id === trustedWebContentsId;
+  if (trustedWebContents.size === 0) return false;
+  return trustedWebContents.has(event.sender.id);
+}
+
+function senderMayUseChannel(event, channel) {
+  const role = getSenderRole(event);
+  if (role === null) return false;
+  if (role === ROLE_MAIN) return true;
+  return SIGNER_CHANNELS.has(channel);
 }
 
 function parseType(spec) {
@@ -86,6 +116,7 @@ function validatePayload(channel, payload) {
 function registerChannel(channel, handler) {
   ipcMain.handle(channel, (event, payload) => {
     if (!isTrustedSender(event)) return { ok: false, error: 'unauthorized sender' };
+    if (!senderMayUseChannel(event, channel)) return { ok: false, error: 'unauthorized channel' };
     if (!validatePayload(channel, payload)) return { ok: false, error: 'invalid payload' };
     if (!REQUIRED_AUTH.has(channel) && !auth.getSession()) return { ok: false, error: 'not authenticated' };
     if (REQUIRED_ADMIN.has(channel) && !(auth.getSession() && auth.getSession().isAdmin)) {
@@ -167,6 +198,15 @@ function registerIpcHandlers() {
   registerChannel(CHANNELS.AGREEMENTS_GET_CUSTOMER, agreements.getCustomerHandler);
   registerChannel(CHANNELS.AGREEMENTS_SUBMIT, agreements.submitHandler);
 
+  registerChannel(CHANNELS.SIGNING_START, signing.startHandler);
+  registerChannel(CHANNELS.SIGNING_GET_STATUS, signing.getStatusHandler);
+  registerChannel(CHANNELS.SIGNING_SET_ENABLED, signing.setEnabledHandler);
+  registerChannel(CHANNELS.SIGNING_SET_WITNESS, signing.setWitnessHandler);
+  registerChannel(CHANNELS.SIGNING_GET_CONTEXT, signing.getContextHandler);
+  registerChannel(CHANNELS.SIGNING_SUBMIT, signing.submitHandler);
+  registerChannel(CHANNELS.SIGNING_CANCEL, signing.cancelHandler);
+  registerChannel(CHANNELS.SIGNING_ABANDON, signing.abandonHandler);
+
   registerChannel(CHANNELS.REPORTS_GET_YEARS, reports.getYearsHandler);
   registerChannel(CHANNELS.REPORTS_GET_DATA, reports.getDataHandler);
   registerChannel(CHANNELS.REPORTS_DELETE_CHECKOUT, reports.deleteCheckoutHandler);
@@ -180,4 +220,13 @@ function registerIpcHandlers() {
   registerChannel(CHANNELS.IMPORT_EXPORT_IMPORT_EQUIPMENT, importExport.importEquipmentHandler);
 }
 
-module.exports = { registerIpcHandlers, setTrustedWebContents, validatePayload, isTrustedSender };
+module.exports = {
+  registerIpcHandlers,
+  setTrustedWebContents,
+  addSignerWebContents,
+  removeTrustedWebContents,
+  validatePayload,
+  isTrustedSender,
+  getSenderRole,
+  senderMayUseChannel,
+};

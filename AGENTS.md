@@ -26,9 +26,10 @@ The app is a full rewrite of the original Flask web application. The legacy Pyth
 | File | Purpose |
 |------|---------|
 | `src/main/main.js` | Electron entry — window creation, security flags, single-instance lock |
-| `src/main/ipc.js` | IPC wiring — sender/payload/auth/admin gates, all channel registration |
+| `src/main/ipc.js` | IPC wiring — sender/payload/auth/admin gates, main-vs-signer role gate, all channel registration |
 | `src/main/db.js` | SQLite data layer — schema, migrations, first-run legacy DB copy, query helpers |
 | `src/main/auth.js` | Password hashing (werkzeug pbkdf2 + scrypt compatible), session, rate limiter, auth handlers |
+| `src/main/signing.js` | Second-display signing session — display detection, kiosk window lifecycle, session context |
 | `src/main/features/*.js` | Feature handlers: customers, equipment, loans, agreements, reports, import-export |
 | `src/shared/ipc-contract.js` | Channel names, payload specs (types + length caps), auth/admin gate sets |
 | `src/shared/business-logic.js` | Due dates, holidays, phones, date/escape helpers (parity with the checked-in fixture) |
@@ -36,7 +37,9 @@ The app is a full rewrite of the original Flask web application. The legacy Pyth
 | `src/renderer/index.html` | SPA shell — strict CSP meta, nav, view container |
 | `src/renderer/js/app.js` | App namespace: session state, hash router, flash banners, inline-edit engine, HTML escaping |
 | `src/renderer/js/views/*.js` | Views: auth, master (checkout/return), customers, equipment, reports, settings, agreement |
-| `tests/*.test.js` | Jest suites: business-logic parity, auth, ipc-contract, db migration, features |
+| `src/renderer/sign.html`, `src/renderer/js/sign.js` | Customer-facing second-display signing window (no nav, strict CSP, kiosk) |
+| `src/renderer/js/agreement-shared.js` | `TERMS` text + signature pad shared by the inline and second-display agreement renderers |
+| `tests/*.test.js` | Jest suites: business-logic parity, auth, ipc-contract, db migration, features, signing, renderer |
 | `tests/fixtures/legacy-reference.json` | Frozen parity oracle for business rules (due dates, holidays, phones) |
 | `electron-builder.yml` | Packaging config (NSIS + portable, GitHub publish feed) |
 | `.github/workflows/build.yml` | CI: jest → electron-builder → checksums → artifacts/release |
@@ -64,7 +67,7 @@ npm run dist:portable   # portable only
 
 ### Build (CI)
 Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
-1. `npm ci` + jest (all 163 tests)
+1. `npm ci` + jest (all 218 tests)
 2. `npm run dist` (unsigned unless signing secrets are present)
 3. Generates `SHA256 checksums.txt`
 4. Uploads artifacts (installer, portable, checksums)
@@ -76,7 +79,7 @@ Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
 - **No comments in code** unless explicitly requested
 - **No new dependencies** without confirming they're needed
 - **IPC contract first**: channels are declared in `src/shared/ipc-contract.js` with payload type+length specs. Payload validation is fail-closed (unknown keys, wrong types, over-length all rejected). New channels must get a PAYLOADS entry.
-- **Security gates are central**: `src/main/ipc.js` enforces sender trust, payload validation, auth (`REQUIRED_AUTH` = public; everything else needs a session), and admin (`REQUIRED_ADMIN`: deletes, import/export, shutdown). Feature handlers never re-validate types but DO re-check business rules.
+- **Security gates are central**: `src/main/ipc.js` enforces sender trust (role-gated: `main` vs `signer`), payload validation, auth (`REQUIRED_AUTH` = public; everything else needs a session), admin (`REQUIRED_ADMIN`: deletes, import/export, shutdown, `signing:setEnabled`), and a per-role channel allowlist (`SIGNER_CHANNELS`). Feature handlers never re-validate types but DO re-check business rules.
 - **Renderer trust boundary**: renderer is sandboxed + context-isolated; it can only reach main via `window.dme.*`. All user input must be HTML-escaped before DOM injection (`App.escapeHtml`).
 - **SQLite**: single-writer, WAL mode. Use `db.withDb(fn)` — opens a fresh `DatabaseSync`, closes it via try/finally. Always parameterized queries.
 - **Phone numbers**: stored as `(XXX) XXX-XXXX`. Use `normalizePhone()` / `formatPhone()` from business-logic.js.
@@ -99,17 +102,19 @@ Pushes to `Remote`, `main`, or `master` trigger GitHub Actions:
 - `node:sqlite` requires Electron ≥ 35 (we pin ≥ 43). `DatabaseSync` is synchronous — keep operations short.
 - Jest tests must pass an explicit temp `dbPath` to `initDb()` — never let `db.js` resolve the default path (it falls back to the repo-root `database.db` dir artifact).
 - `importExport:import*` handlers ignore renderer-supplied paths; the main process always opens native `dialog` pickers.
+- **Second-display signing**: when tablet signing is enabled (Settings, admin-gated, persisted in the `settings` table) and a non-primary display is attached, checkout opens a frameless fullscreen `sign.html` window there instead of the inline view; otherwise the inline agreement renders unchanged. The main process owns the signing session (`customerId`/`loanIds`/dates/witness); the signing window may only call `signing:getContext` and `signing:submit`. Any interruption (window closed, display unplugged, renderer crash) cancels the pending loans so equipment cannot be left invisibly locked; `signing:abandon` is the deliberate staff handoff that keeps them and returns to inline signing.
 - The build ships only `src/**/*` + `package.json` + `icon.ico`.
 - CI signing is wired for SSL.com eSigner via Azure Trusted Signing secrets — but ONLY runs when the secrets are present. Unsigned builds get SmartScreen warnings. Do NOT wire `electron-updater` in-app until builds are code-signed.
 
 ## Testing
 
-Jest suites in `tests/` (`*.test.js`), 168 tests / 6 suites:
+Jest suites in `tests/` (`*.test.js`), 218 tests / 7 suites:
 - `business-logic.test.js` — 990-case parity fixture (2020–2040 holidays/due dates), phones, dates, escape
 - `auth.test.js` — werkzeug 2.3.7 pbkdf2 + 3.1.3 scrypt hash vectors, register/login/rate-limit/session/change-password
-- `ipc-contract.test.js` — payload validation fail-closed, sender gate, REQUIRED_AUTH/ADMIN invariants, full handler pipeline
-- `db.test.js` — schema/index/migration parity, legacy DB copy, migration idempotence
+- `ipc-contract.test.js` — payload validation fail-closed, sender gate, REQUIRED_AUTH/ADMIN invariants, signing signer allowlist, full handler pipeline
+- `db.test.js` — schema/index/migration parity, legacy DB copy, migration idempotence, settings round-trip
 - `features.test.js` — end-to-end handler flows (add/search/checkout/agreement/return/cancel/reports) on temp DBs
-- `renderer.test.js` — boots the real renderer in jsdom (devDependency), navigates every view, guards against stale-view teardown crashes (e.g. Home's pending search `requestAnimationFrame` must not re-enter `applyFilters` after `module.container` is nulled), and asserts deletes go through `app:confirm` (never native `window.confirm`, which breaks input focus in Electron on Windows until the window blurs/refocuses)
+- `signing.test.js` — second-display detection/fallback, kiosk window options, session ownership, submit/cancel/handoff/interruption paths
+- `renderer.test.js` — boots the real renderer in jsdom (devDependency), navigates every view, guards against stale-view teardown crashes (e.g. Home's pending search `requestAnimationFrame` must not re-enter `applyFilters` after `module.container` is nulled), asserts deletes go through `app:confirm` (never native `window.confirm`, which breaks input focus in Electron on Windows until the window blurs/refocuses), and covers the checkout→tablet handoff plus the `sign.html` signing window
 
 Run: `npm test`. Python is NOT required for tests — the parity fixture is checked in.

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mendure DME - Standard Operating Procedure</title>
+<style>
+  @page { size: Letter; margin: 0.8in; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #222; }
+  h1 { font-size: 20pt; color: #1f3864; border-bottom: 2px solid #1f3864; padding-bottom: 4px; margin-top: 0; }
+  h2 { font-size: 15pt; color: #1f3864; margin-top: 18px; border-bottom: 1px solid #bfbfbf; padding-bottom: 2px; }
+  h3 { font-size: 12.5pt; color: #2e5496; margin-top: 12px; }
+  h4 { font-size: 11.5pt; color: #2e5496; margin-top: 10px; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0 6px 22px; }
+  li { margin: 3px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 10.5pt; }
+  th, td { border: 1px solid #bfbfbf; padding: 5px 7px; vertical-align: top; }
+  th { background: #ddebf7; font-weight: 600; }
+  code { font-family: Consolas, "Courier New", monospace; background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 10pt; }
+  .title-block { text-align: center; margin-bottom: 10px; }
+  .title-block h1 { border-bottom: none; }
+  .subtitle { font-size: 12pt; color: #595959; }
+  .meta { font-size: 10pt; color: #595959; margin: 2px 0; }
+  .note { background: #fff2cc; border-left: 3px solid #bf8f00; padding: 6px 10px; margin: 8px 0; }
+  .tip { background: #e2efda; border-left: 3px solid #548235; padding: 6px 10px; margin: 8px 0; }
+  .warn { background: #fce4ec; border-left: 3px solid #c00000; padding: 6px 10px; margin: 8px 0; }
+  .page-break { page-break-after: always; }
+  .toc a { text-decoration: none; color: #1f3864; }
+  .toc li { margin: 2px 0; }
+  .small { font-size: 9.5pt; color: #595959; }
+  .kbd { display: inline-block; border: 1px solid #999; border-radius: 3px; padding: 0 4px; background: #f7f7f7; font-family: Consolas, monospace; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+
+<div class="title-block">
+  <h1>Mendure DME</h1>
+  <p class="subtitle">Standard Operating Procedure &amp; User Training Guide</p>
+  <p class="meta">NW Montana Veterans Stand Down &amp; Food Pantry DME Loan Program</p>
+  <p class="meta">Version 1.0 &nbsp;|&nbsp; Prepared for staff training</p>
+</div>
+
+<h2>Table of Contents</h2>
+<ol class="toc">
+  <li><a href="#purpose">Purpose and Scope</a></li>
+  <li><a href="#overview">System Overview</a></li>
+  <li><a href="#gettingstarted">Getting Started (First Run and Login)</a></li>
+  <li><a href="#navigation">Navigation</a></li>
+  <li><a href="#home">Home (Master) Page</a></li>
+  <li><a href="#customers">Customers Page</a></li>
+  <li><a href="#equipment">Equipment Page</a></li>
+  <li><a href="#reports">Reports Page</a></li>
+  <li><a href="#settings">Settings Page</a></li>
+  <li><a href="#signing">Customer Signing and Agreements</a></li>
+  <li><a href="#validation">Validation Rules</a></li>
+  <li><a href="#data">Data Management and Backup</a></li>
+  <li><a href="#roles">Roles and Permissions</a></li>
+  <li><a href="#troubleshooting">Troubleshooting</a></li>
+  <li><a href="#appendix">Appendix A - Quick Reference</a></li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2 id="purpose">1. Purpose and Scope</h2>
+<p>This Standard Operating Procedure (SOP) trains staff on how to use the Mendure DME desktop application to manage durable medical equipment (DME) checkouts, returns, customer records, and loan agreements for the NW Montana Veterans Stand Down and Food Pantry DME Loan Program.</p>
+<p>It covers day-to-day operations performed by staff and administrators. It does not cover software installation, network setup, or developer tasks.</p>
+
+<h2 id="overview">2. System Overview</h2>
+<ul>
+  <li><strong>Application:</strong> Mendure DME, an offline desktop program (Windows). No internet connection is required to operate it.</li>
+  <li><strong>Data storage:</strong> A local SQLite database stored per user at <code>%APPDATA%\Mendure DME\database.db</code>. Data never leaves the machine.</li>
+  <li><strong>Checkout period:</strong> Equipment is loaned for 120 days. Due dates are calculated automatically and account for weekends and 11 federal holidays.</li>
+  <li><strong>Agreements:</strong> Each checkout requires the customer to agree to the General Terms of Use and Loan Agreement and may include a digital signature.</li>
+  <li><strong>Roles:</strong> The first account created is an Administrator. Additional users may be standard staff with limited permissions.</li>
+</ul>
+<div class="note">All user input is validated. Equipment IDs, phone numbers, ZIP codes, and dates must follow the formats described in Section 11.</div>
+
+<h2 id="gettingstarted">3. Getting Started</h2>
+<h3>3.1 First Run (Administrator Account)</h3>
+<ol>
+  <li>Launch the application. On the first run you will see <strong>Create Admin Account</strong>.</li>
+  <li>Enter a username (at least 3 characters) and a password (at least 8 characters).</li>
+  <li>Confirm the password and click <strong>Create Account</strong>. You are logged in automatically.</li>
+</ol>
+<div class="warn">The first registered user becomes the Administrator. Choose a strong password and keep it secure.</div>
+<h3>3.2 Login</h3>
+<ol>
+  <li>Enter your username and password on the <strong>DME Checkout Login</strong> screen.</li>
+  <li>Click <strong>Log In</strong>. On success you are taken to the Home page.</li>
+  <li>After 5 failed login attempts within 5 minutes, login is temporarily locked.</li>
+</ol>
+<h3>3.3 Logout and Password Change</h3>
+<ul>
+  <li>Click <strong>Logout</strong> in the top navigation bar at any time.</li>
+  <li>To change your password, open <strong>Settings</strong>, enter your current and new password (minimum 8 characters), then click <strong>Update Password</strong>. You will be logged out and must log in again.</li>
+</ul>
+
+<h2 id="navigation">4. Navigation</h2>
+<p>The top navigation bar (visible after login) contains these links:</p>
+<table>
+  <thead><tr><th>Link</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>Home</td><td>Central page for customers, equipment, checkouts, and returns.</td></tr>
+    <tr><td>Customers</td><td>View, search, edit, and delete customer records.</td></tr>
+    <tr><td>Equipment</td><td>View, search, edit, sell, or delete equipment.</td></tr>
+    <tr><td>Reports</td><td>Analytics, checkout log, and item sales log.</td></tr>
+    <tr><td>Settings</td><td>Account, data import/export, signing display, shutdown.</td></tr>
+  </tbody>
+</table>
+<p>The current username is shown in the navigation bar.</p>
+
+<h2 id="home">5. Home (Master) Page</h2>
+<p>The Home page is the central workspace. It contains forms to add customers and equipment, a checkout panel, search and filters, tabs, and the equipment table.</p>
+
+<h3>5.1 Add a Customer</h3>
+<ol>
+  <li>In the <strong>Add Customer</strong> section, enter Name, Phone, and ZIP Code.</li>
+  <li>Phone must contain at least 10 digits. ZIP must be exactly 5 digits.</li>
+  <li>Click <strong>Add Customer</strong>. A success message confirms creation.</li>
+</ol>
+
+<h3>5.2 Add Equipment</h3>
+<ol>
+  <li>In the <strong>Add Equipment</strong> section, enter an Equipment ID in <code>AA-0000</code> format (two letters, dash, four digits) and an Item Name.</li>
+  <li>Click <strong>Add Equipment</strong>.</li>
+</ol>
+
+<h3>5.3 Check Out Equipment</h3>
+<ol>
+  <li>In the equipment table, check the <strong>Select</strong> box next to one or more available items.</li>
+  <li>In the <strong>Checkout</strong> section, enter a customer reference (customer ID, name, phone, or ZIP).</li>
+  <li>Optionally adjust the <strong>Checkout Date</strong> (defaults to today).</li>
+  <li>Click <strong>Checkout Selected</strong>.</li>
+</ol>
+<ul>
+  <li>If multiple customers match the reference, a <strong>Confirm Customer Selection</strong> list appears. Click <strong>Select</strong> for the correct customer.</li>
+  <li>Loan records are created and the customer agreement is presented for signature (see Section 10).</li>
+  <li>If tablet signing is enabled and a second display is connected, the agreement is sent to that display.</li>
+</ul>
+
+<h3>5.4 Return Equipment</h3>
+<p>For a checked-out item, click <strong>Return</strong> in the Action column. A confirmation message appears and the item becomes available.</p>
+
+<h3>5.5 Extend a Loan</h3>
+<p>Click <strong>Extend</strong> on a checked-out item to extend the return date by the standard checkout period (120 days from the new date).</p>
+
+<h3>5.6 View an Agreement</h3>
+<p>Click <strong>View Agreement</strong> on a checked-out item (or from the Customers page) to display the stored agreement, equipment list, signature, and witness.</p>
+
+<h3>5.7 Filter, Search, and Sort</h3>
+<ul>
+  <li><strong>Search box:</strong> filters equipment, item name, customer, or phone.</li>
+  <li><strong>Tabs:</strong> All, Checked Out, Available, Overdue (with counts).</li>
+  <li><strong>Date filters:</strong> Checked Out From / To narrow by checkout date.</li>
+  <li><strong>Column headers:</strong> click to sort ascending/descending by that column.</li>
+</ul>
+
+<h3>5.8 Inline Editing</h3>
+<p>Many table cells are editable directly: click a cell, type a new value, and press Enter or click away to save. Phone numbers are auto-formatted as <code>(XXX) XXX-XXXX</code>. Affected fields include Equipment ID, Item Name, Customer Name, Phone, Checked Out Date, and Due Date.</p>
+<div class="tip">If an edit fails validation, the cell reverts to its original value and an error message is shown.</div>
+
+<h2 id="customers">6. Customers Page</h2>
+<ul>
+  <li><strong>Search:</strong> filter by name, phone, or ZIP.</li>
+  <li><strong>Add New Customer:</strong> form with name, phone, and ZIP.</li>
+  <li><strong>Inline edit:</strong> name, phone, and ZIP columns are editable.</li>
+  <li><strong>View Agreement:</strong> button appears if the customer has a stored agreement.</li>
+  <li><strong>Delete:</strong> available to Administrators only, with confirmation.</li>
+  <li><strong>Sort:</strong> by ID, Name, Phone, ZIP, or Date Added.</li>
+</ul>
+
+<h2 id="equipment">7. Equipment Page</h2>
+<ul>
+  <li><strong>Search:</strong> filter by equipment ID, item, or customer.</li>
+  <li><strong>Add New Equipment:</strong> ID in <code>AA-0000</code> format and item name.</li>
+  <li><strong>Inline edit:</strong> Equipment ID, Item Name, and Date Verified.</li>
+  <li><strong>Status column:</strong> shows Available or "Checked out to ... until ...".</li>
+  <li><strong>Sell (Admin):</strong> for available items, opens a price dialog; records the sale and removes the item from inventory.</li>
+  <li><strong>Delete (Admin):</strong> removes the equipment record (with confirmation).</li>
+</ul>
+
+<h2 id="reports">8. Reports Page</h2>
+<p>Three report tabs are available:</p>
+<table>
+  <thead><tr><th>Tab</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td>Analytics</td><td>Checkout summary (total checkouts, unique guests, average per day), guests per day table, and monthly averages.</td></tr>
+    <tr><td>Checkout Log</td><td>Historical checkout records: date, equipment, item, customer ZIP, with admin delete.</td></tr>
+    <tr><td>Item Sales Log</td><td>Recorded equipment sales: date, equipment, item, price, with admin delete.</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>Filter by Year:</strong> applies to all tabs.</li>
+  <li><strong>Date From / To:</strong> available on the Checkout Log and Item Sales Log tabs.</li>
+  <li><strong>Month filter:</strong> available on Analytics (guests per day).</li>
+  <li><strong>Print Report:</strong> opens the print dialog for the currently displayed report.</li>
+</ul>
+
+<h2 id="settings">9. Settings Page</h2>
+<h3>9.1 Account</h3>
+<ul>
+  <li>Shows the current username.</li>
+  <li><strong>Change Password</strong> form (minimum 8 characters; new password must be confirmed).</li>
+  <li><strong>Logout</strong> button. Administrators also see a <strong>Shutdown</strong> button.</li>
+</ul>
+
+<h3>9.2 Export Data (Admin)</h3>
+<p>Export Customers, Equipment, Checkout Log, or Equipment List as <code>.xlsx</code> or <code>.csv</code>. A save dialog lets you choose the destination file.</p>
+
+<h3>9.3 Import Data (Admin)</h3>
+<p>Import Customers or Equipment from Excel (<code>.xlsx</code>) or CSV (<code>.csv</code>) files.</p>
+<table>
+  <thead><tr><th>Import Type</th><th>Required Columns (from row 2)</th></tr></thead>
+  <tbody>
+    <tr><td>Customers</td><td>Name, Phone, ZipCode</td></tr>
+    <tr><td>Equipment</td><td>EquipmentID (AA-0000), ItemName</td></tr>
+  </tbody>
+</table>
+
+<h3>9.4 Customer Signing (Tablet)</h3>
+<p>When a second display is connected (for example a tablet running Spacedesk), the customer agreement can be shown there so the customer signs on the tablet. If no second display is connected, agreements are signed on the main screen.</p>
+<ul>
+  <li><strong>Toggle:</strong> "Send agreements to the second display" (Administrators only).</li>
+  <li>Status text shows whether a second display is detected.</li>
+  <li>The setting is persisted.</li>
+</ul>
+
+<h3>9.5 Import/Export Instructions</h3>
+<p>The Settings page lists the exact column headers expected for each import/export type.</p>
+
+<h2 id="signing">10. Customer Signing and Agreements</h2>
+<h3>10.1 Inline Signing (Default)</h3>
+<ol>
+  <li>After checkout, the Customer Agreement screen opens.</li>
+  <li>Review customer and equipment details; the checkout and return dates can be adjusted.</li>
+  <li>The customer must check <strong>I agree to the General Terms of Use and Loan Agreement</strong>.</li>
+  <li>Optionally capture a signature on the signature pad (Clear to redo).</li>
+  <li>Optionally enter a <strong>Witnessed By</strong> name.</li>
+  <li>Click <strong>Save Agreement</strong> to finalize. Equipment is now checked out.</li>
+</ol>
+<p><strong>Cancel</strong> removes the pending checkout and returns the items to available status.</p>
+
+<h3>10.2 Second-Display (Tablet) Signing</h3>
+<ul>
+  <li>When enabled and a second display is detected, checkout sends the agreement to that display.</li>
+  <li>The Home page shows a <strong>Waiting for Customer Signature</strong> panel with a witness field.</li>
+  <li>Options on the Home panel: <strong>Sign on this screen</strong> (hands back to inline signing) or <strong>Cancel Checkout</strong>.</li>
+  <li>When the customer submits on the tablet, a success message appears and the list refreshes.</li>
+</ul>
+
+<h3>10.3 Interruptions</h3>
+<div class="warn">If signing is interrupted (window closed, display unplugged, or crash), the pending checkout is cancelled automatically so equipment cannot be left invisibly locked. A "Signing ended before the agreement was signed" message is shown.</div>
+
+<h3>10.4 Viewing a Stored Agreement</h3>
+<p>Open <strong>View Agreement</strong> to see customer details, agreement date, equipment and return-by dates, the full terms, the signature image, and witness. Use <strong>Print</strong> to print or save as PDF.</p>
+
+<h3>10.5 General Terms (Summary)</h3>
+<p>The agreement states that the equipment is loaned under the NW MT Veterans Stand Down and Food Pantry DME Loan Program; the recipient accepts responsibility for the equipment and its safe use; use is at the recipient's own risk; and therapists are also responsible for returning or paying for equipment by the due date. The full text is displayed in the application during signing.</p>
+
+<h2 id="validation">11. Validation Rules</h2>
+<table>
+  <thead><tr><th>Field</th><th>Rule</th></tr></thead>
+  <tbody>
+    <tr><td>Equipment ID</td><td><code>AA-0000</code>: two uppercase letters, dash, four digits.</td></tr>
+    <tr><td>Phone number</td><td>At least 10 digits; stored as <code>(XXX) XXX-XXXX</code>.</td></tr>
+    <tr><td>ZIP code</td><td>Exactly 5 digits.</td></tr>
+    <tr><td>Username</td><td>At least 3 characters.</td></tr>
+    <tr><td>Password</td><td>At least 8 characters.</td></tr>
+    <tr><td>Checkout date / Return date</td><td><code>YYYY-MM-DD</code>.</td></tr>
+    <tr><td>Sale price</td><td>Numeric, up to 2 decimal places.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="data">12. Data Management and Backup</h2>
+<ul>
+  <li><strong>Location:</strong> <code>%APPDATA%\Mendure DME\database.db</code> (plus <code>-wal</code> / <code>-shm</code> sidecar files).</li>
+  <li><strong>Backup:</strong> use Settings &rarr; Export to save Customers, Equipment, Checkout Log, and Equipment List as Excel or CSV. Store backups in a safe location.</li>
+  <li><strong>Import:</strong> use Settings &rarr; Import to load customers or equipment from Excel/CSV.</li>
+  <li><strong>First-run migration:</strong> if a legacy database is found next to the application, it is copied into the user data folder on first run. Existing data is never overwritten.</li>
+  <li><strong>Shutdown:</strong> Administrators can shut down the application from Settings.</li>
+</ul>
+<div class="note">Because data is local and unencrypted, protect the machine and back up regularly.</div>
+
+<h2 id="roles">13. Roles and Permissions</h2>
+<table>
+  <thead><tr><th>Capability</th><th>Staff</th><th>Administrator</th></tr></thead>
+  <tbody>
+    <tr><td>View and search all pages</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Add customers / equipment</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Checkout / return / extend</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Inline edit records</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>View agreements and reports</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Delete customers / equipment / log entries</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Sell equipment</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Export / import data</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Tablet signing toggle</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Shutdown application</td><td>No</td><td>Yes</td></tr>
+  </tbody>
+</table>
+
+<h2 id="troubleshooting">14. Troubleshooting</h2>
+<table>
+  <thead><tr><th>Problem</th><th>Suggested Action</th></tr></thead>
+  <tbody>
+    <tr><td>Login locked</td><td>Wait 5 minutes after 5 failed attempts, then retry.</td></tr>
+    <tr><td>Customer not found during checkout</td><td>Verify the reference (ID, name, phone, or ZIP) or add the customer first.</td></tr>
+    <tr><td>Equipment ID rejected</td><td>Use the <code>AA-0000</code> format (two letters, dash, four digits).</td></tr>
+    <tr><td>Phone/ZIP rejected</td><td>Phone needs 10+ digits; ZIP needs exactly 5 digits.</td></tr>
+    <tr><td>Signing interrupted</td><td>Pending checkout is cancelled automatically; re-check out the items.</td></tr>
+    <tr><td>No second display detected</td><td>Connect the display first, then enable tablet signing in Settings.</td></tr>
+    <tr><td>Import fails</td><td>Check column headers and that data starts on row 2.</td></tr>
+    <tr><td>Cannot delete records</td><td>Only Administrators can delete; log in as an admin.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="appendix">Appendix A - Quick Reference</h2>
+<ul>
+  <li><strong>Navigation:</strong> Home, Customers, Equipment, Reports, Settings.</li>
+  <li><strong>Checkout:</strong> select available items &rarr; enter customer &rarr; Checkout Selected &rarr; sign agreement.</li>
+  <li><strong>Return:</strong> Return button on a checked-out row.</li>
+  <li><strong>Extend:</strong> Extend button on a checked-out row.</li>
+  <li><strong>Inline edit:</strong> click cell, type, Enter or blur to save.</li>
+  <li><strong>Print:</strong> Reports page Print Report button; agreement View Agreement Print button.</li>
+  <li><strong>Backup:</strong> Settings &rarr; Export (xlsx/csv).</li>
+</ul>
+<p class="small">End of document.</p>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Customer Agreement</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/sign.css">
+</head>
+<body class="sign-body">
+  <div class="sign-shell">
+    <header class="sign-header">
+      <h1>Customer Agreement</h1>
+      <p class="sign-subtitle">Please review and sign below.</p>
+    </header>
+    <div id="sign-container">
+      <div class="card"><div class="card-body"><p class="loading">Loading agreement...</p></div></div>
+    </div>
+  </div>
+  <div id="sign-flash" aria-live="polite"></div>
+  <script src="js/agreement-shared.js"></script>
+  <script src="js/sign.js"></script>
+</body>
+</html>

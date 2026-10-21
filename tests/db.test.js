@@ -77,6 +77,10 @@ const EXPECTED_TABLES = {
     { name: 'deletion_date', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
     { name: 'sale_price', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
   ],
+  settings: [
+    { name: 'key', type: 'TEXT', notnull: 0, dflt_value: null, pk: 1 },
+    { name: 'value', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+  ],
 };
 
 const EXPECTED_INDEXES = [
@@ -201,7 +205,7 @@ function createLegacySchemaDb(dbPath) {
 }
 
 describe('initDb on a fresh database', () => {
-  test('creates all seven legacy schema tables with matching columns', () => {
+  test('creates every expected table with matching columns', () => {
     const dir = makeTempDir();
     const dbPath = path.join(dir, 'database.db');
     db.initDb(dbPath);
@@ -217,7 +221,7 @@ describe('initDb on a fresh database', () => {
     }
   });
 
-  test('creates all seven legacy indexes', () => {
+  test('creates all expected indexes', () => {
     const dir = makeTempDir();
     const dbPath = path.join(dir, 'database.db');
     db.initDb(dbPath);
@@ -237,7 +241,7 @@ describe('initDb on a fresh database', () => {
     cleanupDir(dir);
   });
 
-  test('initDb is idempotent when run twice on the same path', () => {
+test('initDb is idempotent when run twice on the same path', () => {
     const dir = makeTempDir();
     const dbPath = path.join(dir, 'database.db');
     db.initDb(dbPath);
@@ -248,8 +252,32 @@ describe('initDb on a fresh database', () => {
       expect(indexNames(conn)).toEqual(EXPECTED_INDEXES);
     } finally {
       conn.close();
-      cleanupDir(dir);
     }
+  });
+
+  test('getSetting and setSetting round-trip through the settings table', () => {
+    const dir = makeTempDir();
+    const dbPath = path.join(dir, 'database.db');
+    db.initDb(dbPath);
+    expect(db.getSetting('missingKey', 'fallback')).toBe('fallback');
+    expect(db.getSetting('missingKey')).toBeNull();
+
+    db.setSetting('tabletSigningEnabled', '0');
+    expect(db.getSetting('tabletSigningEnabled')).toBe('0');
+    db.setSetting('tabletSigningEnabled', '1');
+    expect(db.getSetting('tabletSigningEnabled')).toBe('1');
+    expect(db.getSetting('tabletSigningEnabled', 'fallback')).toBe('1');
+
+    const conn = openConn(dbPath);
+    try {
+      expect(conn.prepare('SELECT COUNT(*) AS cnt FROM settings').get().cnt).toBe(1);
+    } finally {
+      conn.close();
+    }
+
+db.initDb(dbPath);
+    expect(db.getSetting('tabletSigningEnabled')).toBe('1');
+    cleanupDir(dir);
   });
 });
 

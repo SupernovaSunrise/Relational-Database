@@ -32,6 +32,15 @@ const CHANNELS = Object.freeze({
   AGREEMENTS_GET_CUSTOMER: 'agreements:getCustomer',
   AGREEMENTS_SUBMIT: 'agreements:submit',
 
+  SIGNING_START: 'signing:start',
+  SIGNING_GET_STATUS: 'signing:getStatus',
+  SIGNING_SET_ENABLED: 'signing:setEnabled',
+  SIGNING_SET_WITNESS: 'signing:setWitness',
+  SIGNING_GET_CONTEXT: 'signing:getContext',
+  SIGNING_SUBMIT: 'signing:submit',
+  SIGNING_CANCEL: 'signing:cancel',
+  SIGNING_ABANDON: 'signing:abandon',
+
   REPORTS_GET_YEARS: 'reports:getYears',
   REPORTS_GET_DATA: 'reports:getData',
   REPORTS_DELETE_CHECKOUT: 'reports:deleteCheckout',
@@ -82,6 +91,19 @@ const PAYLOADS = Object.freeze({
     witnessName: 'string:255?',
     signatureData: 'string:900000?',
   },
+  [CHANNELS.SIGNING_START]: {
+    customerId: 'number',
+    loanIds: 'number[]:50',
+    checkoutDate: 'string:32',
+    dueDate: 'string:32?',
+  },
+  [CHANNELS.SIGNING_GET_STATUS]: {},
+  [CHANNELS.SIGNING_SET_ENABLED]: { enabled: 'boolean' },
+  [CHANNELS.SIGNING_SET_WITNESS]: { witnessName: 'string:255?' },
+  [CHANNELS.SIGNING_GET_CONTEXT]: {},
+  [CHANNELS.SIGNING_SUBMIT]: { waiverAgreed: 'boolean', signatureData: 'string:900000?' },
+  [CHANNELS.SIGNING_CANCEL]: {},
+  [CHANNELS.SIGNING_ABANDON]: {},
   [CHANNELS.REPORTS_GET_YEARS]: {},
   [CHANNELS.REPORTS_GET_DATA]: {
     reportType: 'string:32',
@@ -102,6 +124,10 @@ const PAYLOADS = Object.freeze({
 
 const MAX_PAYLOAD_BYTES = 1024 * 1024;
 
+const EVENTS = Object.freeze({
+  SIGNING_EVENT: 'signing:event',
+});
+
 const REQUIRED_AUTH = Object.freeze(new Set([
   CHANNELS.AUTH_REGISTER,
   CHANNELS.AUTH_LOGIN,
@@ -121,6 +147,32 @@ const REQUIRED_ADMIN = Object.freeze(new Set([
   CHANNELS.IMPORT_EXPORT_EXPORT_MASTER,
   CHANNELS.IMPORT_EXPORT_IMPORT_CUSTOMERS,
   CHANNELS.IMPORT_EXPORT_IMPORT_EQUIPMENT,
+  CHANNELS.SIGNING_SET_ENABLED,
 ]));
 
-module.exports = { CHANNELS, PAYLOADS, REQUIRED_AUTH, REQUIRED_ADMIN, MAX_PAYLOAD_BYTES };
+const SIGNING_CHANNELS = Object.freeze(new Set([
+  CHANNELS.SIGNING_START,
+  CHANNELS.SIGNING_GET_STATUS,
+  CHANNELS.SIGNING_SET_ENABLED,
+  CHANNELS.SIGNING_SET_WITNESS,
+  CHANNELS.SIGNING_GET_CONTEXT,
+  CHANNELS.SIGNING_SUBMIT,
+  CHANNELS.SIGNING_CANCEL,
+  CHANNELS.SIGNING_ABANDON,
+]));
+
+const SIGNER_CHANNELS = Object.freeze(new Set([
+  CHANNELS.SIGNING_GET_CONTEXT,
+  CHANNELS.SIGNING_SUBMIT,
+]));
+
+module.exports = {
+  CHANNELS,
+  PAYLOADS,
+  REQUIRED_AUTH,
+  REQUIRED_ADMIN,
+  MAX_PAYLOAD_BYTES,
+  EVENTS,
+  SIGNING_CHANNELS,
+  SIGNER_CHANNELS,
+};
